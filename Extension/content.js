@@ -51,71 +51,71 @@
     if (v) v.playbackRate = speed;
   }
 
-  // ── Fullscreen exit — called whenever we toggle play ──────────────────────
-  // Patching requestFullscreen / webkitRequestFullscreen doesn't work because
-  // YouTube calls native WebKit code directly on iOS. Instead we poll briefly
-  // after play() and exit fullscreen the moment it appears.
-  function exitFullscreenIfActive() {
-    let attempts = 0;
-    const check = setInterval(() => {
-      attempts++;
-      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-      if (fsEl) {
-        try {
-          if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-          else if (document.exitFullscreen)  document.exitFullscreen();
-        } catch (_) {}
-        clearInterval(check);
-      }
-      // Also check YouTube's own fullscreen class
-      const player = getPlayer();
-      if (player && player.classList.contains('ytp-fullscreen')) {
-        if (typeof player.cancelFullscreen === 'function') player.cancelFullscreen();
-        else if (typeof player.exitFullscreen === 'function') player.exitFullscreen();
-        clearInterval(check);
-      }
-      if (attempts >= 10) clearInterval(check); // give up after ~500ms
-    }, 50);
+  // ── iOS fullscreen interception ────────────────────────────────────────────
+  // iOS video fullscreen is completely separate from the W3C Fullscreen API.
+  // document.fullscreenElement is always null on iOS — the correct APIs are:
+  //   video.webkitDisplayingFullscreen  (detection)
+  //   webkitbeginfullscreen event       (fires on the video element on entry)
+  //   video.webkitExitFullScreen()      (exit — note capital S in Screen)
+  //
+  // We attach a listener to the video element. When our button was the cause
+  // (blockFullscreen flag is set), we call webkitExitFullScreen immediately.
+  let blockFullscreen = false;
+
+  function setupIOSFullscreenInterception(video) {
+    if (video._ytSpeedFsPatched) return;
+    video._ytSpeedFsPatched = true;
+
+    video.addEventListener('webkitbeginfullscreen', () => {
+      if (!blockFullscreen) return;
+      // Give WebKit one frame to finish entering fullscreen, then exit
+      requestAnimationFrame(() => {
+        try { video.webkitExitFullScreen(); } catch (_) {}
+      });
+    });
   }
 
   // ── Play / Pause ───────────────────────────────────────────────────────────
   function ytTogglePlayPause() {
+    const v = getVideo();
+    if (v) setupIOSFullscreenInterception(v);
+
     const player = getPlayer();
 
     if (player && typeof player.playVideo === 'function') {
       const state = player.getPlayerState();
       if (state === 1 || state === 3) {
+        // Pausing — no fullscreen risk
         player.pauseVideo();
       } else {
+        // Playing — arm the fullscreen block flag before calling play
+        blockFullscreen = true;
+        setTimeout(() => { blockFullscreen = false; }, 1500);
         player.playVideo();
-        exitFullscreenIfActive();
       }
-
-      // Patch YouTube's own enterFullscreen so future play presses also work
-      if (typeof player.enterFullscreen === 'function' && !player._ytSpeedPatched) {
-        player._ytSpeedPatched = true;
-        const orig = player.enterFullscreen.bind(player);
-        player.enterFullscreen = function (...args) {
-          // Only block when triggered by our button (within 1s of a toggle)
-          if (player._blockFs) return;
-          return orig(...args);
-        };
-      }
-      player._blockFs = true;
-      setTimeout(() => { if (player) player._blockFs = false; }, 1000);
       return;
     }
 
     // Fallback: click YouTube's native play button
     const ytBtn = document.querySelector('.ytp-play-button');
-    if (ytBtn) { ytBtn.click(); exitFullscreenIfActive(); return; }
+    if (ytBtn) {
+      blockFullscreen = true;
+      setTimeout(() => { blockFullscreen = false; }, 1500);
+      ytBtn.click();
+      return;
+    }
 
-    // Last resort
-    const v = getVideo();
+    // Last resort: direct video element
     if (!v) return;
     v.setAttribute('playsinline', '');
     v.setAttribute('webkit-playsinline', '');
-    if (v.paused) { v.play(); exitFullscreenIfActive(); } else { v.pause(); }
+    if (v.paused) {
+      blockFullscreen = true;
+      setTimeout(() => { blockFullscreen = false; }, 1500);
+      v.play();
+    } else {
+      v.pause();
+    }
   }
 
   // ── YouTube dark mode ──────────────────────────────────────────────────────
@@ -195,6 +195,8 @@
     const playBtn = document.createElement('button');
     playBtn.id = 'yt-speed-playpause';
     const video = getVideo();
+    // Set up iOS fullscreen interception as early as possible
+    if (video) setupIOSFullscreenInterception(video);
     playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
     playRow.appendChild(playBtn);
 
