@@ -1,4 +1,54 @@
-/* ── Container ──────────────────────────────────────────────────────────── */
+/* ── CSS custom properties — cascade to all children automatically ───────── */
+#yt-speed-container {
+  /* Light mode defaults */
+  --spd-fg:        #111111;
+  --spd-fg-dim:    rgba(0,0,0,0.38);
+  --spd-bg:        rgba(235,235,235,0.95);
+  --spd-border:    rgba(0,0,0,0.07);
+  --spd-track:     rgba(0,0,0,0.10);
+  --spd-midmark:   rgba(0,0,0,0.18);
+  --spd-play-bg:   rgba(0,0,0,0.09);
+  --spd-thumb:     #ffffff;
+  --spd-input-bg:  rgba(255,255,255,0.7);
+  --spd-input-bd:  rgba(0,0,0,0.15);
+  --spd-toggle-bg: rgba(120,120,120,0.3);
+  --spd-divider:   rgba(0,0,0,0.10);
+}
+
+/* YouTube dark mode OR forced dark via [data-theme] */
+html[dark] #yt-speed-container,
+#yt-speed-container[data-theme="dark"] {
+  --spd-fg:        #ffffff;
+  --spd-fg-dim:    rgba(255,255,255,0.38);
+  --spd-bg:        rgba(18,18,18,0.93);
+  --spd-border:    rgba(255,255,255,0.06);
+  --spd-track:     rgba(255,255,255,0.14);
+  --spd-midmark:   rgba(255,255,255,0.22);
+  --spd-play-bg:   rgba(255,255,255,0.12);
+  --spd-thumb:     #e2e2e2;
+  --spd-input-bg:  rgba(255,255,255,0.08);
+  --spd-input-bd:  rgba(255,255,255,0.12);
+  --spd-toggle-bg: rgba(120,120,120,0.4);
+  --spd-divider:   rgba(255,255,255,0.08);
+}
+
+/* Forced light — explicit override even inside html[dark] */
+#yt-speed-container[data-theme="light"] {
+  --spd-fg:        #111111 !important;
+  --spd-fg-dim:    rgba(0,0,0,0.38) !important;
+  --spd-bg:        rgba(235,235,235,0.95) !important;
+  --spd-border:    rgba(0,0,0,0.07) !important;
+  --spd-track:     rgba(0,0,0,0.10) !important;
+  --spd-midmark:   rgba(0,0,0,0.18) !important;
+  --spd-play-bg:   rgba(0,0,0,0.09) !important;
+  --spd-thumb:     #ffffff !important;
+  --spd-input-bg:  rgba(255,255,255,0.7) !important;
+  --spd-input-bd:  rgba(0,0,0,0.15) !important;
+  --spd-toggle-bg: rgba(120,120,120,0.3) !important;
+  --spd-divider:   rgba(0,0,0,0.10) !important;
+}
+
+/* ── Container ───────────────────────────────────────────────────────────── */
 #yt-speed-container {
   position: fixed;
   bottom: env(safe-area-inset-bottom, 0px);
@@ -15,28 +65,13 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 
-  /* Light mode default */
-  background: rgba(235, 235, 235, 0.95);
-  border-top: 1px solid rgba(0,0,0,0.07);
-  color: #111;
+  background:  var(--spd-bg);
+  border-top:  1px solid var(--spd-border);
+  color:       var(--spd-fg);
+  transition:  background 0.25s, border-color 0.25s, color 0.25s;
 }
 
-/* YouTube dark mode (html[dark]) or forced dark via attribute */
-html[dark] #yt-speed-container,
-#yt-speed-container[data-theme="dark"] {
-  background: rgba(18, 18, 18, 0.92);
-  border-top-color: rgba(255,255,255,0.06);
-  color: #fff;
-}
-
-/* Forced light */
-#yt-speed-container[data-theme="light"] {
-  background: rgba(235, 235, 235, 0.95);
-  border-top-color: rgba(0,0,0,0.07);
-  color: #111;
-}
-
-/* ── Top row: speed label + settings button ──────────────────────────────── */
+/* ── Top row: speed label + settings ─────────────────────────────────────── */
 #yt-speed-top-row {
   width: 100%;
   display: flex;
@@ -49,24 +84,21 @@ html[dark] #yt-speed-container,
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.3px;
-  -webkit-user-select: none;
-  user-select: none;
+  color: var(--spd-fg);
+  -webkit-user-select: none; user-select: none;
 }
 
 #yt-speed-settings-btn {
-  background: none;
-  border: none;
+  background: none; border: none;
   font-family: -apple-system, Helvetica Neue, sans-serif;
   font-size: 11px;
-  opacity: 0.45;
+  color: var(--spd-fg-dim);
   cursor: pointer;
   padding: 4px 6px;
-  -webkit-user-select: none;
-  user-select: none;
-  color: inherit;
+  -webkit-user-select: none; user-select: none;
 }
 
-/* ── Play/Pause button row (centered, above slider) ──────────────────────── */
+/* ── Play/pause row ──────────────────────────────────────────────────────── */
 #yt-speed-play-row {
   width: 100%;
   display: flex;
@@ -74,172 +106,131 @@ html[dark] #yt-speed-container,
 }
 
 #yt-speed-playpause {
-  width: 54px;
-  height: 54px;
+  width: 54px; height: 54px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
   font-size: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  -webkit-user-select: none;
-  user-select: none;
-  color: inherit;
-
-  /* Light mode */
-  background: rgba(0,0,0,0.09);
-}
-
-html[dark] #yt-speed-playpause,
-#yt-speed-container[data-theme="dark"] #yt-speed-playpause {
-  background: rgba(255,255,255,0.12);
-}
-#yt-speed-container[data-theme="light"] #yt-speed-playpause {
-  background: rgba(0,0,0,0.09);
+  display: flex; align-items: center; justify-content: center;
+  -webkit-user-select: none; user-select: none;
+  background: var(--spd-play-bg);
+  color: var(--spd-fg);
+  transition: background 0.25s, color 0.25s;
 }
 
 /* ── Track wrapper ───────────────────────────────────────────────────────── */
 #yt-speed-track-wrap {
   position: relative;
   width: 100%;
-  display: flex;
-  align-items: center;
+  display: flex; align-items: center;
 }
 
-/* 1× midpoint tick */
 #yt-speed-midmark {
   position: absolute;
   left: 50%; top: 50%;
   transform: translate(-50%, -50%);
   width: 3px; height: 26px;
   border-radius: 2px;
+  background: var(--spd-midmark);
   pointer-events: none;
   z-index: 3;
-  background: rgba(0,0,0,0.18);
-}
-html[dark] #yt-speed-midmark,
-#yt-speed-container[data-theme="dark"] #yt-speed-midmark {
-  background: rgba(255,255,255,0.22);
+  transition: background 0.25s;
 }
 
 /* ── Slider — pill thumb ─────────────────────────────────────────────────── */
 #yt-speed-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 24px;
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 24px;
   border-radius: 12px;
-  outline: none;
-  cursor: pointer;
-  position: relative;
-  z-index: 2;
-  background: rgba(0,0,0,0.10);
-}
-html[dark] #yt-speed-slider,
-#yt-speed-container[data-theme="dark"] #yt-speed-slider {
-  background: rgba(255,255,255,0.14);
+  outline: none; cursor: pointer;
+  position: relative; z-index: 2;
+  background: var(--spd-track);
+  transition: background 0.25s;
 }
 
-/* Wide pill thumb — much easier to grab without looking */
 #yt-speed-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 72px;
-  height: 40px;
+  -webkit-appearance: none; appearance: none;
+  width: 72px; height: 40px;
   border-radius: 20px;
-  background: #ffffff;
+  background: var(--spd-thumb);
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.30);
-  position: relative;
-  z-index: 4;
-}
-html[dark] #yt-speed-slider::-webkit-slider-thumb,
-#yt-speed-container[data-theme="dark"] #yt-speed-slider::-webkit-slider-thumb {
-  background: #e0e0e0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.28);
+  position: relative; z-index: 4;
+  transition: background 0.25s;
 }
 
 /* ── End labels ──────────────────────────────────────────────────────────── */
 #yt-speed-ends {
   width: 100%;
-  display: flex;
-  justify-content: space-between;
+  display: flex; justify-content: space-between;
   font-family: -apple-system, Helvetica Neue, sans-serif;
   font-size: 10px;
-  opacity: 0.38;
-  -webkit-user-select: none;
-  user-select: none;
+  color: var(--spd-fg-dim);
+  -webkit-user-select: none; user-select: none;
 }
 
 /* ── Inline settings panel ───────────────────────────────────────────────── */
 #yt-speed-panel {
   width: 100%;
-  display: none;
-  flex-direction: column;
-  gap: 10px;
+  display: none; flex-direction: column; gap: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(128,128,128,0.2);
+  border-top: 1px solid var(--spd-divider);
 }
 #yt-speed-panel.open { display: flex; }
 
 .yt-sp-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   font-family: -apple-system, Helvetica Neue, sans-serif;
   font-size: 13px;
+  color: var(--spd-fg);
 }
 
 .yt-sp-row input[type=number] {
-  width: 64px;
-  padding: 5px 8px;
+  width: 64px; padding: 5px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(128,128,128,0.25);
-  font-size: 14px;
-  font-weight: 600;
-  text-align: right;
-  background: rgba(255,255,255,0.6);
-  color: #111;
-}
-html[dark] .yt-sp-row input[type=number],
-#yt-speed-container[data-theme="dark"] .yt-sp-row input[type=number] {
-  background: rgba(255,255,255,0.08);
-  color: #fff;
-  border-color: rgba(255,255,255,0.12);
+  border: 1px solid var(--spd-input-bd);
+  background: var(--spd-input-bg);
+  color: var(--spd-fg);
+  font-size: 14px; font-weight: 600; text-align: right;
+  transition: background 0.25s, border-color 0.25s, color 0.25s;
 }
 .yt-sp-row input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 
-/* Toggle */
 .yt-sp-toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
 .yt-sp-toggle input { opacity: 0; width: 0; height: 0; }
 .yt-sp-toggle-track {
-  position: absolute; inset: 0;
-  border-radius: 13px;
-  background: rgba(120,120,120,0.3);
-  transition: background 0.2s;
-  cursor: pointer;
+  position: absolute; inset: 0; border-radius: 13px;
+  background: var(--spd-toggle-bg);
+  transition: background 0.2s; cursor: pointer;
 }
 .yt-sp-toggle input:checked + .yt-sp-toggle-track { background: #34c759; }
 .yt-sp-toggle-thumb {
   position: absolute; top: 3px; left: 3px;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-  transition: left 0.2s;
-  pointer-events: none;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: left 0.2s; pointer-events: none;
 }
 .yt-sp-toggle input:checked ~ .yt-sp-toggle-thumb { left: 21px; }
 
 #yt-sp-save {
-  width: 100%;
-  padding: 9px;
-  background: #0a84ff;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  width: 100%; padding: 9px;
+  background: #0a84ff; color: #fff;
+  border: none; border-radius: 10px;
+  font-size: 14px; font-weight: 600;
   font-family: -apple-system, sans-serif;
   cursor: pointer;
+}
+
+/* ── Hide YouTube recommendations ────────────────────────────────────────── */
+#secondary,
+ytd-watch-next-secondary-results-renderer,
+ytd-compact-video-renderer,
+ytd-compact-radio-renderer,
+ytd-compact-autoplay-renderer,
+ytd-reel-shelf-renderer,
+ytd-rich-shelf-renderer,
+ytd-browse[page-subtype="home"] ytd-rich-grid-renderer,
+ytd-browse[page-subtype="home"] ytd-rich-section-renderer,
+ytm-reel-shelf-renderer {
+  display: none !important;
 }

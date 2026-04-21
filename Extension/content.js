@@ -147,6 +147,11 @@
       <button id="yt-sp-save">Save</button>
     `;
 
+    // Block all container touches from reaching YouTube's player beneath
+    ['touchstart', 'touchmove', 'touchend'].forEach(evt =>
+      container.addEventListener(evt, e => e.stopPropagation(), { passive: true })
+    );
+
     container.appendChild(topRow);
     container.appendChild(playRow);
     container.appendChild(trackWrap);
@@ -178,12 +183,24 @@
     );
 
     // ── Play/pause button ─────────────────────────────────────────────────
-    playBtn.addEventListener('click', (e) => {
-      e.preventDefault();
+    // Use touchstart/touchend (not click) so we can preventDefault and block
+    // the synthetic click that YouTube's player would otherwise receive.
+    playBtn.addEventListener('touchstart', (e) => {
       e.stopPropagation();
+    }, { passive: true });
+
+    playBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();   // cancels the synthetic mouse/click event
+      e.stopPropagation();  // stops the touch reaching YouTube's overlay
       const v = getVideo();
       if (!v) return;
       if (v.paused) { v.play(); } else { v.pause(); }
+    }, { passive: false }); // passive:false required for preventDefault
+
+    // Fallback for non-touch (desktop/Orion desktop mode)
+    playBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
     });
 
     if (video) {
