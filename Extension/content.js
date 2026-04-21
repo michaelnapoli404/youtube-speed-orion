@@ -4,33 +4,69 @@
   const _api = typeof browser !== 'undefined' ? browser : chrome;
   const SLIDER_ID = 'yt-speed-container';
   const DEFAULT_MAX = 10;
-  const SNAP_ZONE = 30; // steps either side of center (500) that snap to 1x
+  const SNAP_ZONE  = 30; // steps either side of 500 (1×) that snap
 
-  let maxSpeed = DEFAULT_MAX;
+  let maxSpeed  = DEFAULT_MAX;
   let snapToOne = false;
-  let lastUrl = location.href;
+  let appearance = 'auto'; // 'auto' | 'dark' | 'light'
+  let lastUrl   = location.href;
 
   // ── Speed math ─────────────────────────────────────────────────────────────
   function sliderToSpeed(raw) {
     const v = raw / 1000;
     return v <= 0.5 ? v * 2 : 1 + (v - 0.5) * 2 * (maxSpeed - 1);
   }
-
   function speedToSlider(speed) {
     if (speed <= 1) return Math.round((speed / 2) * 1000);
     return Math.round((0.5 + (speed - 1) / (2 * (maxSpeed - 1))) * 1000);
   }
-
   function fmt(speed) {
     if (speed < 0.05) return '0x';
     return speed.toFixed(2).replace(/\.?0+$/, '') + 'x';
   }
 
   function getVideo() { return document.querySelector('video'); }
-
   function applySpeed(speed) {
     const v = getVideo();
     if (v) v.playbackRate = Math.max(0, speed);
+  }
+
+  // ── Recommendation hiding (JS-driven — more reliable than CSS alone) ───────
+  const REC_SELECTORS = [
+    // Watch page right-column / below-video recommendations
+    '#secondary',
+    'ytd-watch-next-secondary-results-renderer',
+    'ytd-compact-video-renderer',
+    'ytd-compact-radio-renderer',
+    'ytd-compact-playlist-renderer',
+    'ytd-compact-autoplay-renderer',
+    'ytd-autoplay-renderer',
+    // Shorts & shelf rows
+    'ytd-reel-shelf-renderer',
+    'ytd-rich-shelf-renderer',
+    // Homepage feed
+    'ytd-rich-grid-renderer',
+    'ytd-rich-section-renderer',
+    // Mobile YouTube
+    'ytm-reel-shelf-renderer',
+    'ytm-item-section-renderer[data-content-type="home-feed"]',
+  ];
+
+  function hideRecommendations() {
+    REC_SELECTORS.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        el.style.setProperty('display', 'none', 'important');
+      });
+    });
+  }
+
+  // ── Apply theme to container ────────────────────────────────────────────────
+  function applyTheme(container) {
+    if (appearance === 'auto') {
+      container.removeAttribute('data-theme');
+    } else {
+      container.setAttribute('data-theme', appearance);
+    }
   }
 
   // ── Build slider UI ─────────────────────────────────────────────────────────
@@ -39,16 +75,11 @@
 
     const container = document.createElement('div');
     container.id = SLIDER_ID;
+    applyTheme(container);
 
-    // ── Top row: play/pause | speed label | settings ──────────────────────
+    // ── Row 1: speed label + settings button ──────────────────────────────
     const topRow = document.createElement('div');
     topRow.id = 'yt-speed-top-row';
-
-    const playBtn = document.createElement('button');
-    playBtn.id = 'yt-speed-playpause';
-    const video = getVideo();
-    playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
-    playBtn.setAttribute('aria-label', 'Play/Pause');
 
     const label = document.createElement('div');
     label.id = 'yt-speed-label';
@@ -59,11 +90,21 @@
     settingsBtn.id = 'yt-speed-settings-btn';
     settingsBtn.textContent = `max ${maxSpeed}x ✎`;
 
-    topRow.appendChild(playBtn);
     topRow.appendChild(label);
     topRow.appendChild(settingsBtn);
 
-    // ── Slider track ──────────────────────────────────────────────────────
+    // ── Row 2: centered play/pause button ────────────────────────────────
+    const playRow = document.createElement('div');
+    playRow.id = 'yt-speed-play-row';
+
+    const playBtn = document.createElement('button');
+    playBtn.id = 'yt-speed-playpause';
+    const video = getVideo();
+    playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
+
+    playRow.appendChild(playBtn);
+
+    // ── Row 3: slider track ───────────────────────────────────────────────
     const trackWrap = document.createElement('div');
     trackWrap.id = 'yt-speed-track-wrap';
 
@@ -71,17 +112,17 @@
     midMark.id = 'yt-speed-midmark';
 
     const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.id = 'yt-speed-slider';
-    slider.min = '0';
-    slider.max = '1000';
-    slider.step = '1';
+    slider.type  = 'range';
+    slider.id    = 'yt-speed-slider';
+    slider.min   = '0';
+    slider.max   = '1000';
+    slider.step  = '1';
     slider.value = '500';
 
     trackWrap.appendChild(midMark);
     trackWrap.appendChild(slider);
 
-    // ── End labels ────────────────────────────────────────────────────────
+    // ── Row 4: end labels ─────────────────────────────────────────────────
     const endLabels = document.createElement('div');
     endLabels.id = 'yt-speed-ends';
     endLabels.innerHTML =
@@ -107,12 +148,13 @@
     `;
 
     container.appendChild(topRow);
+    container.appendChild(playRow);
     container.appendChild(trackWrap);
     container.appendChild(endLabels);
     container.appendChild(panel);
     document.body.appendChild(container);
 
-    // ── Sync slider to current video speed ────────────────────────────────
+    // Sync slider to current video speed
     if (video && video.playbackRate !== 1) {
       const clamped = Math.min(video.playbackRate, maxSpeed);
       slider.value = speedToSlider(clamped);
@@ -122,35 +164,28 @@
     // ── Slider input ──────────────────────────────────────────────────────
     slider.addEventListener('input', () => {
       let val = parseInt(slider.value, 10);
-
       if (snapToOne && Math.abs(val - 500) <= SNAP_ZONE) {
         val = 500;
         slider.value = '500';
       }
-
       const speed = sliderToSpeed(val);
       label.textContent = fmt(speed);
       applySpeed(speed);
     });
 
-    // Block YouTube from swallowing touch events on the slider
     ['touchstart', 'touchmove', 'touchend'].forEach(evt =>
       slider.addEventListener(evt, e => e.stopPropagation(), { passive: true })
     );
 
     // ── Play/pause button ─────────────────────────────────────────────────
     playBtn.addEventListener('click', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       const v = getVideo();
       if (!v) return;
-      if (v.paused) {
-        v.play();
-      } else {
-        v.pause();
-      }
+      if (v.paused) { v.play(); } else { v.pause(); }
     });
 
-    // Keep button icon in sync with actual video state
     if (video) {
       video.addEventListener('play',  () => { playBtn.textContent = '⏸'; });
       video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
@@ -174,26 +209,20 @@
       panel.classList.toggle('open');
     });
 
-    // Save settings from panel
     document.getElementById('yt-sp-save').addEventListener('click', () => {
-      const newMax = parseFloat(document.getElementById('yt-sp-max').value);
+      const newMax  = parseFloat(document.getElementById('yt-sp-max').value);
       const newSnap = document.getElementById('yt-sp-snap').checked;
-
       if (isNaN(newMax) || newMax < 2) return;
 
-      maxSpeed = newMax;
+      maxSpeed  = newMax;
       snapToOne = newSnap;
-
       _api.storage.sync.set({ maxSpeed, snapToOne });
 
       settingsBtn.textContent = `max ${maxSpeed}x ✎`;
       document.getElementById('yt-speed-max-label').textContent = maxSpeed + 'x';
-
       panel.classList.remove('open');
 
-      // Re-clamp current speed if above new max
-      const currentVal = parseInt(slider.value, 10);
-      const currentSpeed = sliderToSpeed(currentVal);
+      const currentSpeed = sliderToSpeed(parseInt(slider.value, 10));
       if (currentSpeed > maxSpeed) {
         slider.value = '1000';
         label.textContent = fmt(maxSpeed);
@@ -217,17 +246,19 @@
     if (el) el.remove();
   }
 
-  function isWatchPage() {
-    return location.pathname === '/watch';
-  }
+  function isWatchPage() { return location.pathname === '/watch'; }
 
   // ── Init ───────────────────────────────────────────────────────────────────
   function loadAndBuild() {
-    _api.storage.sync.get({ maxSpeed: DEFAULT_MAX, snapToOne: false }, (result) => {
-      maxSpeed = parseFloat(result.maxSpeed) || DEFAULT_MAX;
-      snapToOne = !!result.snapToOne;
-      if (isWatchPage()) buildSlider();
-    });
+    _api.storage.sync.get(
+      { maxSpeed: DEFAULT_MAX, snapToOne: false, appearance: 'auto' },
+      (result) => {
+        maxSpeed   = parseFloat(result.maxSpeed) || DEFAULT_MAX;
+        snapToOne  = !!result.snapToOne;
+        appearance = result.appearance || 'auto';
+        if (isWatchPage()) buildSlider();
+      }
+    );
   }
 
   // ── SPA navigation watcher ─────────────────────────────────────────────────
@@ -237,21 +268,31 @@
       removeSlider();
       if (isWatchPage()) setTimeout(loadAndBuild, 1200);
     }
+    hideRecommendations();
   });
   navObserver.observe(document.documentElement, { subtree: true, childList: true });
 
-  // Heartbeat — re-inject if YouTube nukes the slider
+  // Heartbeat
   setInterval(() => {
     if (isWatchPage() && !document.getElementById(SLIDER_ID)) loadAndBuild();
-  }, 3000);
+    hideRecommendations();
+  }, 2000);
 
-  // Settings change from popup
+  // Settings changes from popup
   _api.storage.onChanged.addListener((changes) => {
-    if (changes.maxSpeed) maxSpeed = parseFloat(changes.maxSpeed.newValue) || DEFAULT_MAX;
-    if (changes.snapToOne) snapToOne = !!changes.snapToOne.newValue;
-    removeSlider();
-    if (isWatchPage()) buildSlider();
+    if (changes.maxSpeed)   maxSpeed   = parseFloat(changes.maxSpeed.newValue)   || DEFAULT_MAX;
+    if (changes.snapToOne)  snapToOne  = !!changes.snapToOne.newValue;
+    if (changes.appearance) {
+      appearance = changes.appearance.newValue || 'auto';
+      const c = document.getElementById(SLIDER_ID);
+      if (c) applyTheme(c);
+    }
+    if (changes.maxSpeed || changes.snapToOne) {
+      removeSlider();
+      if (isWatchPage()) buildSlider();
+    }
   });
 
+  hideRecommendations();
   loadAndBuild();
 })();
