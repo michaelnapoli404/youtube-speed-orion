@@ -1,0 +1,91 @@
+/* ── Container ──────────────────────────────────────────────────────────── */
+#yt-speed-container {
+  position: fixed;
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: 0;
+  right: 0;
+  z-index: 2147483647; /* max z-index */
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+
+  padding: 8px 20px 10px;
+  background: rgba(18, 18, 18, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  /* keep touches on the bar from scrolling the page */
+  touch-action: none;
+}
+
+/* ── Speed readout ──────────────────────────────────────────────────────── */
+#yt-speed-label {
+  color: #ffffff;
+  font-family: -apple-system, Helvetica Neue, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Track wrapper (positions the midpoint mark) ────────────────────────── */
+#yt-speed-track-wrap {
+  position: relative;
+  width: 100%;
+}
+
+/* Small tick at the 1x midpoint */
+#yt-speed-midmark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Slider track ───────────────────────────────────────────────────────── */
+#yt-speed-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+/* Thumb */
+#yt-speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* ── End labels (0x · 1x · maxSpeed) ───────────────────────────────────── */
+#yt-speed-ends {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-family: -apple-system, Helvetica Neue, sans-serif;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  user-select: none;
+  -webkit-user-select: none;
+}
