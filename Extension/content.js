@@ -4,12 +4,13 @@
   const _api = typeof browser !== 'undefined' ? browser : chrome;
   const SLIDER_ID = 'yt-speed-container';
   const DEFAULT_MAX = 10;
-  const SNAP_ZONE  = 30; // steps either side of 500 (1×) that snap
+  const SNAP_ZONE  = 30;
 
-  let maxSpeed  = DEFAULT_MAX;
-  let snapToOne = false;
+  let maxSpeed   = DEFAULT_MAX;
+  let snapToOne  = false;
   let appearance = 'auto'; // 'auto' | 'dark' | 'light'
-  let lastUrl   = location.href;
+  let lastUrl    = location.href;
+  let darkModeObserver = null;
 
   // ── Speed math ─────────────────────────────────────────────────────────────
   function sliderToSpeed(raw) {
@@ -31,9 +32,77 @@
     if (v) v.playbackRate = Math.max(0, speed);
   }
 
-  // ── Recommendation hiding (JS-driven — more reliable than CSS alone) ───────
+  // ── YouTube dark mode ──────────────────────────────────────────────────────
+  // 'auto'  → leave html[dark] alone (YouTube controls it)
+  // 'dark'  → force html[dark] on and watch for YouTube removing it
+  // 'light' → force html[dark] off and watch for YouTube re-adding it
+  function applyYouTubeDarkMode() {
+    if (darkModeObserver) {
+      darkModeObserver.disconnect();
+      darkModeObserver = null;
+    }
+
+    if (appearance === 'auto') return; // let YouTube manage it
+
+    const wantDark = appearance === 'dark';
+
+    function enforce() {
+      const has = document.documentElement.hasAttribute('dark');
+      if (wantDark && !has) document.documentElement.setAttribute('dark', '');
+      if (!wantDark && has) document.documentElement.removeAttribute('dark');
+    }
+
+    enforce();
+
+    // Re-enforce if YouTube's JS fights back
+    darkModeObserver = new MutationObserver(enforce);
+    darkModeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['dark']
+    });
+  }
+
+  // ── Apply theme attribute to our container ────────────────────────────────
+  function applyTheme(container) {
+    if (appearance === 'auto') {
+      container.removeAttribute('data-theme');
+    } else {
+      container.setAttribute('data-theme', appearance);
+    }
+    applyYouTubeDarkMode();
+  }
+
+  // ── Play / Pause via YouTube's internal API ───────────────────────────────
+  // Using YouTube's own playVideo()/pauseVideo() avoids the iOS fullscreen
+  // that video.play() can trigger when called outside YouTube's player context.
+  function ytTogglePlayPause() {
+    // Preferred: YouTube's internal player methods
+    const player = document.querySelector('.html5-video-player');
+    if (player && typeof player.playVideo === 'function') {
+      const state = player.getPlayerState();
+      // 1 = playing, 3 = buffering → pause; everything else → play
+      if (state === 1 || state === 3) {
+        player.pauseVideo();
+      } else {
+        player.playVideo();
+      }
+      return;
+    }
+
+    // Fallback: click YouTube's native play button (desktop layout)
+    const ytBtn = document.querySelector('.ytp-play-button');
+    if (ytBtn) { ytBtn.click(); return; }
+
+    // Last resort: direct video control with playsinline guard
+    const v = getVideo();
+    if (!v) return;
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
+    if (v.paused) { v.play(); } else { v.pause(); }
+  }
+
+  // ── Recommendation hiding ─────────────────────────────────────────────────
   const REC_SELECTORS = [
-    // Watch page right-column / below-video recommendations
     '#secondary',
     'ytd-watch-next-secondary-results-renderer',
     'ytd-compact-video-renderer',
@@ -41,13 +110,10 @@
     'ytd-compact-playlist-renderer',
     'ytd-compact-autoplay-renderer',
     'ytd-autoplay-renderer',
-    // Shorts & shelf rows
     'ytd-reel-shelf-renderer',
     'ytd-rich-shelf-renderer',
-    // Homepage feed
     'ytd-rich-grid-renderer',
     'ytd-rich-section-renderer',
-    // Mobile YouTube
     'ytm-reel-shelf-renderer',
     'ytm-item-section-renderer[data-content-type="home-feed"]',
   ];
@@ -60,15 +126,6 @@
     });
   }
 
-  // ── Apply theme to container ────────────────────────────────────────────────
-  function applyTheme(container) {
-    if (appearance === 'auto') {
-      container.removeAttribute('data-theme');
-    } else {
-      container.setAttribute('data-theme', appearance);
-    }
-  }
-
   // ── Build slider UI ─────────────────────────────────────────────────────────
   function buildSlider() {
     if (document.getElementById(SLIDER_ID)) return;
@@ -77,7 +134,7 @@
     container.id = SLIDER_ID;
     applyTheme(container);
 
-    // ── Row 1: speed label + settings button ──────────────────────────────
+    // Row 1: speed label + settings button
     const topRow = document.createElement('div');
     topRow.id = 'yt-speed-top-row';
 
@@ -93,7 +150,7 @@
     topRow.appendChild(label);
     topRow.appendChild(settingsBtn);
 
-    // ── Row 2: centered play/pause button ────────────────────────────────
+    // Row 2: centered play/pause
     const playRow = document.createElement('div');
     playRow.id = 'yt-speed-play-row';
 
@@ -104,7 +161,7 @@
 
     playRow.appendChild(playBtn);
 
-    // ── Row 3: slider track ───────────────────────────────────────────────
+    // Row 3: slider track
     const trackWrap = document.createElement('div');
     trackWrap.id = 'yt-speed-track-wrap';
 
@@ -114,21 +171,18 @@
     const slider = document.createElement('input');
     slider.type  = 'range';
     slider.id    = 'yt-speed-slider';
-    slider.min   = '0';
-    slider.max   = '1000';
-    slider.step  = '1';
-    slider.value = '500';
+    slider.min   = '0'; slider.max = '1000'; slider.step = '1'; slider.value = '500';
 
     trackWrap.appendChild(midMark);
     trackWrap.appendChild(slider);
 
-    // ── Row 4: end labels ─────────────────────────────────────────────────
+    // Row 4: end labels
     const endLabels = document.createElement('div');
     endLabels.id = 'yt-speed-ends';
     endLabels.innerHTML =
       `<span>0x</span><span>1x</span><span id="yt-speed-max-label">${maxSpeed}x</span>`;
 
-    // ── Settings panel ────────────────────────────────────────────────────
+    // Settings panel
     const panel = document.createElement('div');
     panel.id = 'yt-speed-panel';
     panel.innerHTML = `
@@ -147,7 +201,7 @@
       <button id="yt-sp-save">Save</button>
     `;
 
-    // Block all container touches from reaching YouTube's player beneath
+    // Stop all container touches from reaching YouTube's player beneath
     ['touchstart', 'touchmove', 'touchend'].forEach(evt =>
       container.addEventListener(evt, e => e.stopPropagation(), { passive: true })
     );
@@ -170,8 +224,7 @@
     slider.addEventListener('input', () => {
       let val = parseInt(slider.value, 10);
       if (snapToOne && Math.abs(val - 500) <= SNAP_ZONE) {
-        val = 500;
-        slider.value = '500';
+        val = 500; slider.value = '500';
       }
       const speed = sliderToSpeed(val);
       label.textContent = fmt(speed);
@@ -182,27 +235,22 @@
       slider.addEventListener(evt, e => e.stopPropagation(), { passive: true })
     );
 
-    // ── Play/pause button ─────────────────────────────────────────────────
-    // Use touchstart/touchend (not click) so we can preventDefault and block
-    // the synthetic click that YouTube's player would otherwise receive.
-    playBtn.addEventListener('touchstart', (e) => {
-      e.stopPropagation();
-    }, { passive: true });
+    // ── Play/pause — use YouTube's internal API to avoid fullscreen ───────
+    playBtn.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
 
     playBtn.addEventListener('touchend', (e) => {
-      e.preventDefault();   // cancels the synthetic mouse/click event
-      e.stopPropagation();  // stops the touch reaching YouTube's overlay
-      const v = getVideo();
-      if (!v) return;
-      if (v.paused) { v.play(); } else { v.pause(); }
-    }, { passive: false }); // passive:false required for preventDefault
-
-    // Fallback for non-touch (desktop/Orion desktop mode)
-    playBtn.addEventListener('click', (e) => {
-      e.preventDefault();
+      e.preventDefault();  // suppress synthetic click so YouTube's overlay never sees it
       e.stopPropagation();
+      ytTogglePlayPause();
+    }, { passive: false });
+
+    // Non-touch fallback (Orion desktop mode)
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      ytTogglePlayPause();
     });
 
+    // Keep icon in sync with actual video state
     if (video) {
       video.addEventListener('play',  () => { playBtn.textContent = '⏸'; });
       video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
@@ -213,9 +261,7 @@
     label.addEventListener('touchend', () => {
       const now = Date.now();
       if (now - lastTap < 300) {
-        slider.value = '500';
-        label.textContent = '1x';
-        applySpeed(1);
+        slider.value = '500'; label.textContent = '1x'; applySpeed(1);
       }
       lastTap = now;
     });
@@ -231,8 +277,7 @@
       const newSnap = document.getElementById('yt-sp-snap').checked;
       if (isNaN(newMax) || newMax < 2) return;
 
-      maxSpeed  = newMax;
-      snapToOne = newSnap;
+      maxSpeed = newMax; snapToOne = newSnap;
       _api.storage.sync.set({ maxSpeed, snapToOne });
 
       settingsBtn.textContent = `max ${maxSpeed}x ✎`;
@@ -241,9 +286,7 @@
 
       const currentSpeed = sliderToSpeed(parseInt(slider.value, 10));
       if (currentSpeed > maxSpeed) {
-        slider.value = '1000';
-        label.textContent = fmt(maxSpeed);
-        applySpeed(maxSpeed);
+        slider.value = '1000'; label.textContent = fmt(maxSpeed); applySpeed(maxSpeed);
       }
     });
 
@@ -273,6 +316,7 @@
         maxSpeed   = parseFloat(result.maxSpeed) || DEFAULT_MAX;
         snapToOne  = !!result.snapToOne;
         appearance = result.appearance || 'auto';
+        applyYouTubeDarkMode();
         if (isWatchPage()) buildSlider();
       }
     );
@@ -287,9 +331,12 @@
     }
     hideRecommendations();
   });
-  navObserver.observe(document.documentElement, { subtree: true, childList: true });
+  navObserver.observe(document.documentElement, {
+    subtree: true, childList: true,
+    // exclude our own dark-mode attribute mutations to avoid loop
+    attributeFilter: []
+  });
 
-  // Heartbeat
   setInterval(() => {
     if (isWatchPage() && !document.getElementById(SLIDER_ID)) loadAndBuild();
     hideRecommendations();
@@ -297,12 +344,13 @@
 
   // Settings changes from popup
   _api.storage.onChanged.addListener((changes) => {
-    if (changes.maxSpeed)   maxSpeed   = parseFloat(changes.maxSpeed.newValue)   || DEFAULT_MAX;
-    if (changes.snapToOne)  snapToOne  = !!changes.snapToOne.newValue;
+    if (changes.maxSpeed)  maxSpeed  = parseFloat(changes.maxSpeed.newValue) || DEFAULT_MAX;
+    if (changes.snapToOne) snapToOne = !!changes.snapToOne.newValue;
     if (changes.appearance) {
       appearance = changes.appearance.newValue || 'auto';
       const c = document.getElementById(SLIDER_ID);
       if (c) applyTheme(c);
+      else applyYouTubeDarkMode();
     }
     if (changes.maxSpeed || changes.snapToOne) {
       removeSlider();
