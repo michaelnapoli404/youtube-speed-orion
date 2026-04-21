@@ -2,90 +2,264 @@
 #yt-speed-container {
   position: fixed;
   bottom: env(safe-area-inset-bottom, 0px);
-  left: 0;
-  right: 0;
-  z-index: 2147483647; /* max z-index */
+  left: 0; right: 0;
+  z-index: 2147483647;
 
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 
-  padding: 8px 20px 10px;
-  background: rgba(18, 18, 18, 0.82);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-
-  /* keep touches on the bar from scrolling the page */
+  padding: 10px 20px 12px;
   touch-action: none;
+
+  /* Light mode */
+  background: rgba(235, 235, 235, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(0,0,0,0.08);
 }
 
-/* ── Speed readout ──────────────────────────────────────────────────────── */
-#yt-speed-label {
-  color: #ffffff;
-  font-family: -apple-system, Helvetica Neue, sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  line-height: 1;
-  user-select: none;
+/* Dark mode — YouTube sets [dark] on <html> */
+html[dark] #yt-speed-container {
+  background: rgba(18, 18, 18, 0.90);
+  border-top-color: rgba(255,255,255,0.06);
+}
+
+/* ── Top control row ─────────────────────────────────────────────────────── */
+#yt-speed-top-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Play / Pause button */
+#yt-speed-playpause {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  color: #111;
+  flex-shrink: 0;
   -webkit-user-select: none;
+  user-select: none;
 }
+html[dark] #yt-speed-playpause { color: #fff; }
 
-/* ── Track wrapper (positions the midpoint mark) ────────────────────────── */
+/* Speed readout */
+#yt-speed-label {
+  font-family: -apple-system, Helvetica Neue, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #111;
+  -webkit-user-select: none;
+  user-select: none;
+}
+html[dark] #yt-speed-label { color: #fff; }
+
+/* Settings button */
+#yt-speed-settings-btn {
+  background: none;
+  border: none;
+  font-family: -apple-system, Helvetica Neue, sans-serif;
+  font-size: 11px;
+  color: rgba(0,0,0,0.4);
+  cursor: pointer;
+  padding: 4px 6px;
+  -webkit-user-select: none;
+  user-select: none;
+  flex-shrink: 0;
+}
+html[dark] #yt-speed-settings-btn { color: rgba(255,255,255,0.4); }
+
+/* ── Track wrapper ───────────────────────────────────────────────────────── */
 #yt-speed-track-wrap {
   position: relative;
   width: 100%;
+  display: flex;
+  align-items: center;
 }
 
-/* Small tick at the 1x midpoint */
+/* 1x midpoint tick */
 #yt-speed-midmark {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 50%; top: 50%;
   transform: translate(-50%, -50%);
-  width: 2px;
-  height: 10px;
-  background: rgba(255, 255, 255, 0.35);
-  border-radius: 1px;
+  width: 3px;
+  height: 22px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 2px;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
 }
+html[dark] #yt-speed-midmark { background: rgba(255,255,255,0.25); }
 
-/* ── Slider track ───────────────────────────────────────────────────────── */
+/* ── Slider — thick like slide-to-unlock ─────────────────────────────────── */
 #yt-speed-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.25);
+  height: 16px;
+  border-radius: 8px;
   outline: none;
   cursor: pointer;
   position: relative;
   z-index: 2;
-}
 
-/* Thumb */
+  background: rgba(0,0,0,0.12);
+}
+html[dark] #yt-speed-slider { background: rgba(255,255,255,0.18); }
+
 #yt-speed-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 24px;
-  height: 24px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: #ffffff;
+  background: #fff;
   cursor: pointer;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  position: relative;
+  z-index: 4;
+}
+html[dark] #yt-speed-slider::-webkit-slider-thumb {
+  background: #e8e8e8;
 }
 
-/* ── End labels (0x · 1x · maxSpeed) ───────────────────────────────────── */
+/* ── End labels ──────────────────────────────────────────────────────────── */
 #yt-speed-ends {
   width: 100%;
   display: flex;
   justify-content: space-between;
   font-family: -apple-system, Helvetica Neue, sans-serif;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-  user-select: none;
+  color: rgba(0,0,0,0.35);
   -webkit-user-select: none;
+  user-select: none;
+}
+html[dark] #yt-speed-ends { color: rgba(255,255,255,0.35); }
+
+/* ── Inline settings panel ───────────────────────────────────────────────── */
+#yt-speed-panel {
+  width: 100%;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.08);
+}
+html[dark] #yt-speed-panel { border-top-color: rgba(255,255,255,0.08); }
+
+#yt-speed-panel.open { display: flex; }
+
+.yt-sp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: -apple-system, Helvetica Neue, sans-serif;
+  font-size: 13px;
+  color: #111;
+}
+html[dark] .yt-sp-row { color: #eee; }
+
+.yt-sp-row input[type=number] {
+  width: 64px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background: #fff;
+  color: #111;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+html[dark] .yt-sp-row input[type=number] {
+  background: #2c2c2e;
+  border-color: rgba(255,255,255,0.1);
+  color: #fff;
+}
+.yt-sp-row input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+/* Toggle switch */
+.yt-sp-toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.yt-sp-toggle input { opacity: 0; width: 0; height: 0; }
+.yt-sp-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 13px;
+  background: rgba(0,0,0,0.15);
+  transition: background 0.2s;
+  cursor: pointer;
+}
+.yt-sp-toggle input:checked + .yt-sp-toggle-track { background: #34c759; }
+.yt-sp-toggle-thumb {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: left 0.2s;
+  pointer-events: none;
+}
+.yt-sp-toggle input:checked ~ .yt-sp-toggle-thumb { left: 21px; }
+
+#yt-sp-save {
+  width: 100%;
+  padding: 9px;
+  background: #0a84ff;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: -apple-system, sans-serif;
+  cursor: pointer;
+}
+
+/* ── Hide YouTube feed recommendations ───────────────────────────────────── */
+
+/* Homepage feed grid */
+ytd-browse[page-subtype="home"] ytd-rich-grid-renderer,
+ytd-browse[page-subtype="home"] ytd-rich-section-renderer,
+ytd-browse[page-subtype="home"] ytd-rich-shelf-renderer,
+ytd-browse[page-subtype="home"] ytd-reel-shelf-renderer {
+  display: none !important;
+}
+
+/* Watch page — right column recommendations */
+#secondary,
+ytd-watch-next-secondary-results-renderer {
+  display: none !important;
+}
+
+/* Watch page — "Up Next" autoplay banner */
+ytd-compact-autoplay-renderer,
+ytd-autoplay-renderer {
+  display: none !important;
+}
+
+/* Shorts shelf anywhere */
+ytd-reel-shelf-renderer {
+  display: none !important;
+}
+
+/* Mobile YouTube (m.youtube.com) */
+ytm-item-section-renderer[data-content-type="home-feed"],
+ytm-reel-shelf-renderer,
+ytm-shelf-renderer {
+  display: none !important;
 }

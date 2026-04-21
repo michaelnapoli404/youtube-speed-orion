@@ -1,17 +1,17 @@
-// Orion supports both browser.* and chrome.* — prefer browser, fall back to chrome
 const _api = typeof browser !== 'undefined' ? browser : chrome;
 
 document.addEventListener('DOMContentLoaded', () => {
-  const input    = document.getElementById('maxSpeed');
-  const saveBtn  = document.getElementById('save');
-  const status   = document.getElementById('status');
-  const presets  = document.querySelectorAll('.preset');
+  const input     = document.getElementById('maxSpeed');
+  const snapCheck = document.getElementById('snapToOne');
+  const saveBtn   = document.getElementById('save');
+  const status    = document.getElementById('status');
+  const presets   = document.querySelectorAll('.preset');
 
-  // Load saved setting
-  _api.storage.sync.get({ maxSpeed: 10 }, (result) => {
-    const saved = parseFloat(result.maxSpeed) || 10;
-    input.value = saved;
-    syncPresets(saved);
+  // Load saved settings
+  _api.storage.sync.get({ maxSpeed: 10, snapToOne: false }, (result) => {
+    input.value     = parseFloat(result.maxSpeed) || 10;
+    snapCheck.checked = !!result.snapToOne;
+    syncPresets(parseFloat(input.value));
   });
 
   // Preset buttons
@@ -22,10 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Typing a custom value clears preset highlight
-  input.addEventListener('input', () => {
-    syncPresets(parseFloat(input.value));
-  });
+  input.addEventListener('input', () => syncPresets(parseFloat(input.value)));
 
   function syncPresets(value) {
     presets.forEach(btn => {
@@ -46,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    _api.storage.sync.set({ maxSpeed: value }, () => {
+    _api.storage.sync.set({ maxSpeed: value, snapToOne: snapCheck.checked }, () => {
       showStatus('Saved!', '#30d158');
     });
   });
@@ -54,10 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function showStatus(msg, color) {
     status.textContent = msg;
     status.style.color = color;
-    status.style.opacity = '1';
-    clearTimeout(showStatus._timer);
-    showStatus._timer = setTimeout(() => {
-      status.style.opacity = '0';
-    }, 2000);
+    clearTimeout(showStatus._t);
+    showStatus._t = setTimeout(() => { status.textContent = ''; }, 2000);
   }
 });

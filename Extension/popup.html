@@ -11,16 +11,15 @@
       font-family: -apple-system, Helvetica Neue, sans-serif;
       background: #1c1c1e;
       color: #fff;
-      padding: 18px 16px 20px;
-      min-width: 240px;
-      max-width: 300px;
+      padding: 18px 16px 22px;
+      min-width: 250px;
     }
 
     h2 {
       font-size: 15px;
       font-weight: 600;
-      margin-bottom: 16px;
       color: rgba(255,255,255,0.85);
+      margin-bottom: 18px;
     }
 
     .section-label {
@@ -28,7 +27,7 @@
       font-weight: 500;
       color: rgba(255,255,255,0.4);
       text-transform: uppercase;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.7px;
       margin-bottom: 8px;
     }
 
@@ -49,13 +48,8 @@
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
     }
-
-    .preset.active {
-      border-color: #0a84ff;
-      color: #0a84ff;
-    }
+    .preset.active { border-color: #0a84ff; color: #0a84ff; }
 
     /* Custom input */
     .custom-row {
@@ -64,16 +58,10 @@
       gap: 8px;
       background: #2c2c2e;
       border-radius: 10px;
-      padding: 4px 12px;
-      margin-bottom: 18px;
+      padding: 6px 12px;
+      margin-bottom: 20px;
     }
-
-    .custom-row label {
-      font-size: 13px;
-      color: rgba(255,255,255,0.5);
-      white-space: nowrap;
-    }
-
+    .custom-row label { font-size: 13px; color: rgba(255,255,255,0.5); }
     #maxSpeed {
       flex: 1;
       background: transparent;
@@ -85,14 +73,57 @@
       outline: none;
       width: 60px;
     }
-
     #maxSpeed::-webkit-inner-spin-button,
     #maxSpeed::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .unit { font-size: 14px; color: rgba(255,255,255,0.4); }
 
-    .unit {
-      font-size: 14px;
-      color: rgba(255,255,255,0.4);
+    /* Toggle rows */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: #2c2c2e;
+      border-radius: 10px;
+      margin-bottom: 10px;
     }
+    .toggle-row-label {
+      font-size: 14px;
+    }
+    .toggle-row-sublabel {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 2px;
+    }
+
+    /* iOS-style toggle switch */
+    .toggle {
+      position: relative;
+      width: 48px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      background: #3a3a3c;
+      transition: background 0.2s;
+      cursor: pointer;
+    }
+    .toggle input:checked + .toggle-track { background: #34c759; }
+    .toggle-thumb {
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      transition: left 0.2s;
+      pointer-events: none;
+    }
+    .toggle input:checked ~ .toggle-thumb { left: 23px; }
 
     /* Save button */
     #save {
@@ -105,9 +136,8 @@
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
-      transition: opacity 0.15s;
+      margin-top: 8px;
     }
-
     #save:active { opacity: 0.75; }
 
     #status {
@@ -115,15 +145,14 @@
       font-size: 12px;
       margin-top: 10px;
       height: 14px;
-      transition: opacity 0.3s;
     }
 
     .hint {
       margin-top: 14px;
       font-size: 11px;
       color: rgba(255,255,255,0.3);
-      line-height: 1.5;
       text-align: center;
+      line-height: 1.5;
     }
   </style>
 </head>
@@ -144,10 +173,23 @@
     <span class="unit">×</span>
   </div>
 
+  <div class="section-label">Options</div>
+
+  <div class="toggle-row">
+    <div>
+      <div class="toggle-row-label">Snap to 1×</div>
+      <div class="toggle-row-sublabel">Slider locks to 1× near center</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="snapToOne">
+      <div class="toggle-track"></div>
+      <div class="toggle-thumb"></div>
+    </label>
+  </div>
+
   <button id="save">Save</button>
   <div id="status"></div>
-
-  <p class="hint">Double-tap the slider bar to reset to 1×.</p>
+  <p class="hint">Double-tap the speed label on the slider to reset to 1×.</p>
 
   <script src="popup.js"></script>
 </body>
