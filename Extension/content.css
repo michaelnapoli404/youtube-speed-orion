@@ -101,16 +101,33 @@ html[dark] #yt-speed-container,
 /* ── Play/pause row ──────────────────────────────────────────────────────── */
 #yt-speed-play-row {
   width: 100%;
+  position: relative;
   display: flex;
   justify-content: center;
+  align-items: center;
 }
 
 #yt-speed-playpause {
+  width: 324px; height: 324px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 132px;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-user-select: none; user-select: none;
+  background: var(--spd-play-bg);
+  color: var(--spd-fg);
+  transition: background 0.25s, color 0.25s;
+}
+
+#yt-speed-fsbtn {
+  position: absolute;
+  right: 0;
   width: 162px; height: 162px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  font-size: 66px;
+  font-size: 60px;
   display: flex; align-items: center; justify-content: center;
   -webkit-user-select: none; user-select: none;
   background: var(--spd-play-bg);

@@ -104,6 +104,20 @@
     _blockFsTimer = setTimeout(() => { delete v.dataset.ytBlockFs; }, 1500);
   }
 
+  // ── Enter fullscreen intentionally (no block flag set) ────────────────────
+  function enterFullscreen() {
+    const v = getVideo();
+    if (!v) return;
+    // ytBlockFs is NOT set here — we want fullscreen this time.
+    // Our prototype patch only blocks when ytBlockFs === '1', so
+    // the original webkitEnterFullScreen / requestFullscreen runs normally.
+    if (typeof v.webkitEnterFullScreen === 'function') {
+      v.webkitEnterFullScreen();
+    } else if (typeof v.requestFullscreen === 'function') {
+      v.requestFullscreen();
+    }
+  }
+
   // ── Play / Pause ───────────────────────────────────────────────────────────
   function ytTogglePlayPause() {
     const player = getPlayer();
@@ -204,7 +218,7 @@
     topRow.appendChild(label);
     topRow.appendChild(settingsBtn);
 
-    // Row 2: play/pause
+    // Row 2: play/pause + fullscreen
     const playRow = document.createElement('div');
     playRow.id = 'yt-speed-play-row';
 
@@ -212,7 +226,13 @@
     playBtn.id = 'yt-speed-playpause';
     const video = getVideo();
     playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
+
+    const fsBtn = document.createElement('button');
+    fsBtn.id = 'yt-speed-fsbtn';
+    fsBtn.textContent = '⛶';
+
     playRow.appendChild(playBtn);
+    playRow.appendChild(fsBtn);
 
     // Row 3: slider
     const trackWrap = document.createElement('div');
@@ -319,6 +339,20 @@
       video.addEventListener('play',  () => { playBtn.textContent = '⏸'; });
       video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
     }
+
+    // ── Fullscreen button ─────────────────────────────────────────────────
+    ['touchstart', 'touchmove'].forEach(evt =>
+      fsBtn.addEventListener(evt, e => e.stopPropagation(), { passive: true })
+    );
+    fsBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      enterFullscreen();
+    }, { passive: false });
+    fsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      enterFullscreen();
+    });
 
     // ── Double-tap label → 1× ─────────────────────────────────────────────
     let lastTap = 0;
