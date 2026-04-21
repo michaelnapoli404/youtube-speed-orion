@@ -398,8 +398,10 @@
     navObserver.observe(document.documentElement, { subtree: true, childList: true });
 
     setInterval(() => {
-      if (isWatchPage() && !document.getElementById(SLIDER_ID)) loadAndBuild();
-      hideRecommendations();
+      if (isWatchPage()) {
+        if (!document.getElementById(SLIDER_ID)) loadAndBuild();
+        hideRecommendations();
+      }
     }, 3000);
 
     _api.storage.onChanged.addListener((changes) => {
@@ -420,7 +422,6 @@
       }
     });
 
-    hideRecommendations();
     loadAndBuild();
   }
 
