@@ -12,44 +12,6 @@
   let lastUrl    = location.href;
   let darkModeObserver = null;
 
-  // ── Fullscreen interception ────────────────────────────────────────────────
-  // When our play button fires, we set this flag for 800ms.
-  // Any fullscreen request during that window is silently dropped.
-  let blockNextFullscreen = false;
-
-  (function patchFullscreen() {
-    // Standard requestFullscreen
-    const orig = Element.prototype.requestFullscreen;
-    if (orig) {
-      Element.prototype.requestFullscreen = function (...args) {
-        if (blockNextFullscreen) { blockNextFullscreen = false; return Promise.resolve(); }
-        return orig.apply(this, args);
-      };
-    }
-    // WebKit requestFullscreen
-    const origWK = Element.prototype.webkitRequestFullscreen;
-    if (origWK) {
-      Element.prototype.webkitRequestFullscreen = function (...args) {
-        if (blockNextFullscreen) { blockNextFullscreen = false; return; }
-        return origWK.apply(this, args);
-      };
-    }
-    // iOS video-specific webkitEnterFullScreen — must patch the video element
-    // itself after it exists, so we do it lazily in ytTogglePlayPause()
-  })();
-
-  function patchVideoFullscreen(video) {
-    if (video._ytSpeedPatched) return;
-    video._ytSpeedPatched = true;
-    const orig = video.webkitEnterFullScreen;
-    if (orig) {
-      video.webkitEnterFullScreen = function (...args) {
-        if (blockNextFullscreen) { blockNextFullscreen = false; return; }
-        return orig.apply(this, args);
-      };
-    }
-  }
-
   // ── Speed math ─────────────────────────────────────────────────────────────
   function sliderToSpeed(raw) {
     const v = raw / 1000;
@@ -64,45 +26,102 @@
     return speed.toFixed(2).replace(/\.?0+$/, '') + 'x';
   }
 
-  function getVideo() { return document.querySelector('video'); }
+  function getVideo()  { return document.querySelector('video'); }
+  function getPlayer() { return document.querySelector('.html5-video-player'); }
+
+  // ── Apply speed — use YouTube's own API to preserve audio on WebKit ────────
+  // WebKit drops audio on MSE streams (YouTube's separate audio+video tracks)
+  // when video.playbackRate is set directly. player.setPlaybackRate() routes
+  // through YouTube's own audio pipeline and keeps sound at any speed.
   function applySpeed(speed) {
+    speed = Math.max(0, speed);
+
+    const player = getPlayer();
+    if (player && typeof player.setPlaybackRate === 'function') {
+      player.setPlaybackRate(speed);
+      // Also set on the video element directly as a fallback for very high
+      // speeds that YouTube's API may clamp (it will still work visually)
+      const v = getVideo();
+      if (v && Math.abs(v.playbackRate - speed) > 0.01) v.playbackRate = speed;
+      return;
+    }
+
+    // No YouTube player API available — fall back to direct video element
     const v = getVideo();
-    if (v) v.playbackRate = Math.max(0, speed);
+    if (v) v.playbackRate = speed;
+  }
+
+  // ── Fullscreen exit — called whenever we toggle play ──────────────────────
+  // Patching requestFullscreen / webkitRequestFullscreen doesn't work because
+  // YouTube calls native WebKit code directly on iOS. Instead we poll briefly
+  // after play() and exit fullscreen the moment it appears.
+  function exitFullscreenIfActive() {
+    let attempts = 0;
+    const check = setInterval(() => {
+      attempts++;
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+      if (fsEl) {
+        try {
+          if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          else if (document.exitFullscreen)  document.exitFullscreen();
+        } catch (_) {}
+        clearInterval(check);
+      }
+      // Also check YouTube's own fullscreen class
+      const player = getPlayer();
+      if (player && player.classList.contains('ytp-fullscreen')) {
+        if (typeof player.cancelFullscreen === 'function') player.cancelFullscreen();
+        else if (typeof player.exitFullscreen === 'function') player.exitFullscreen();
+        clearInterval(check);
+      }
+      if (attempts >= 10) clearInterval(check); // give up after ~500ms
+    }, 50);
   }
 
   // ── Play / Pause ───────────────────────────────────────────────────────────
   function ytTogglePlayPause() {
-    const v = getVideo();
-    if (v) patchVideoFullscreen(v);
+    const player = getPlayer();
 
-    // Set flag BEFORE triggering play so the fullscreen patch catches it
-    blockNextFullscreen = true;
-    setTimeout(() => { blockNextFullscreen = false; }, 800);
-
-    // Prefer YouTube's internal API (same path as their own button)
-    const player = document.querySelector('.html5-video-player');
     if (player && typeof player.playVideo === 'function') {
       const state = player.getPlayerState();
-      if (state === 1 || state === 3) { player.pauseVideo(); } else { player.playVideo(); }
+      if (state === 1 || state === 3) {
+        player.pauseVideo();
+      } else {
+        player.playVideo();
+        exitFullscreenIfActive();
+      }
+
+      // Patch YouTube's own enterFullscreen so future play presses also work
+      if (typeof player.enterFullscreen === 'function' && !player._ytSpeedPatched) {
+        player._ytSpeedPatched = true;
+        const orig = player.enterFullscreen.bind(player);
+        player.enterFullscreen = function (...args) {
+          // Only block when triggered by our button (within 1s of a toggle)
+          if (player._blockFs) return;
+          return orig(...args);
+        };
+      }
+      player._blockFs = true;
+      setTimeout(() => { if (player) player._blockFs = false; }, 1000);
       return;
     }
 
     // Fallback: click YouTube's native play button
     const ytBtn = document.querySelector('.ytp-play-button');
-    if (ytBtn) { ytBtn.click(); return; }
+    if (ytBtn) { ytBtn.click(); exitFullscreenIfActive(); return; }
 
-    // Last resort: direct video control
+    // Last resort
+    const v = getVideo();
     if (!v) return;
     v.setAttribute('playsinline', '');
     v.setAttribute('webkit-playsinline', '');
-    if (v.paused) { v.play(); } else { v.pause(); }
+    if (v.paused) { v.play(); exitFullscreenIfActive(); } else { v.pause(); }
   }
 
   // ── YouTube dark mode ──────────────────────────────────────────────────────
   function applyYouTubeDarkMode() {
     if (darkModeObserver) { darkModeObserver.disconnect(); darkModeObserver = null; }
     if (appearance === 'auto') return;
-
     const wantDark = appearance === 'dark';
     function enforce() {
       const has = document.documentElement.hasAttribute('dark');
@@ -117,8 +136,8 @@
   }
 
   function applyTheme(container) {
-    if (appearance === 'auto') { container.removeAttribute('data-theme'); }
-    else { container.setAttribute('data-theme', appearance); }
+    if (appearance === 'auto') container.removeAttribute('data-theme');
+    else container.setAttribute('data-theme', appearance);
     applyYouTubeDarkMode();
   }
 
@@ -136,7 +155,6 @@
     'ytd-rich-grid-renderer',
     'ytd-rich-section-renderer',
     'ytm-reel-shelf-renderer',
-    'ytm-item-section-renderer[data-content-type="home-feed"]',
   ];
 
   function hideRecommendations() {
@@ -177,7 +195,6 @@
     const playBtn = document.createElement('button');
     playBtn.id = 'yt-speed-playpause';
     const video = getVideo();
-    if (video) patchVideoFullscreen(video);
     playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
     playRow.appendChild(playBtn);
 
@@ -234,7 +251,7 @@
       label.textContent = fmt(clamped);
     }
 
-    // ── Slider events ─────────────────────────────────────────────────────
+    // ── Slider ────────────────────────────────────────────────────────────
     slider.addEventListener('input', () => {
       let val = parseInt(slider.value, 10);
       if (snapToOne && Math.abs(val - 500) <= SNAP_ZONE) { val = 500; slider.value = '500'; }
@@ -243,8 +260,6 @@
       applySpeed(speed);
     });
 
-    // Only stop propagation on the slider itself — NOT the whole container.
-    // Blanket container stopPropagation breaks YouTube's volume and player controls.
     ['touchstart', 'touchmove', 'touchend'].forEach(evt =>
       slider.addEventListener(evt, e => e.stopPropagation(), { passive: true })
     );
@@ -253,13 +268,11 @@
     ['touchstart', 'touchmove'].forEach(evt =>
       playBtn.addEventListener(evt, e => e.stopPropagation(), { passive: true })
     );
-
     playBtn.addEventListener('touchend', (e) => {
-      e.preventDefault();  // suppress synthetic click
+      e.preventDefault();
       e.stopPropagation();
       ytTogglePlayPause();
     }, { passive: false });
-
     playBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       ytTogglePlayPause();
@@ -297,12 +310,15 @@
       if (cs > maxSpeed) { slider.value = '1000'; label.textContent = fmt(maxSpeed); applySpeed(maxSpeed); }
     });
 
-    // ── Fight YouTube reasserting playbackRate ────────────────────────────
+    // ── Rate sync — only fight back if YouTube changes it unprompted ──────
+    let rateChangedByUs = false;
+    const origApply = applySpeed;
     if (video) {
       video.addEventListener('ratechange', () => {
+        if (rateChangedByUs) return;
         const expected = sliderToSpeed(parseInt(slider.value, 10));
         if (Math.abs(video.playbackRate - expected) > 0.05) {
-          setTimeout(() => applySpeed(expected), 50);
+          setTimeout(() => { rateChangedByUs = true; applySpeed(expected); rateChangedByUs = false; }, 50);
         }
       });
     }
@@ -328,23 +344,20 @@
     );
   }
 
-  // ── SPA navigation watcher ─────────────────────────────────────────────────
-  // Throttle hideRecommendations — calling querySelectorAll on every DOM
-  // mutation during video playback causes jitter.
-  let recThrottle = null;
+  // ── SPA navigation watcher — URL changes only, NO recommendation hiding ───
+  // Calling querySelectorAll in a MutationObserver during video playback
+  // causes audio/video desync and jitter on WebKit. Recommendations are
+  // handled exclusively by the heartbeat below.
   const navObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       removeSlider();
       if (isWatchPage()) setTimeout(loadAndBuild, 1200);
     }
-    if (!recThrottle) {
-      recThrottle = setTimeout(() => { hideRecommendations(); recThrottle = null; }, 500);
-    }
   });
   navObserver.observe(document.documentElement, { subtree: true, childList: true });
 
-  // Heartbeat
+  // ── Heartbeat — slider re-injection + recommendation hiding ───────────────
   setInterval(() => {
     if (isWatchPage() && !document.getElementById(SLIDER_ID)) loadAndBuild();
     hideRecommendations();
