@@ -264,12 +264,16 @@
     }
 
     // ── Slider ────────────────────────────────────────────────────────────
+    // Label updates instantly; speed only applies 150ms after dragging stops
+    // so setPlaybackRate isn't called on every pixel (avoids rebuffer stutter).
+    let _applySpeedTimer = null;
     slider.addEventListener('input', () => {
       let val = parseInt(slider.value, 10);
       if (snapToOne && Math.abs(val - 500) <= SNAP_ZONE) { val = 500; slider.value = '500'; }
       const speed = sliderToSpeed(val);
       label.textContent = fmt(speed);
-      applySpeed(speed);
+      clearTimeout(_applySpeedTimer);
+      _applySpeedTimer = setTimeout(() => applySpeed(speed), 150);
     });
 
     ['touchstart', 'touchmove', 'touchend'].forEach(evt =>
