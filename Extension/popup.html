@@ -122,6 +122,28 @@
     }
     .toggle input:checked ~ .toggle-thumb { left: 23px; }
 
+    /* 1× position row */
+    .onex-wrap {
+      display: flex; align-items: center; gap: 8px;
+    }
+    #oneXPos {
+      width: 100px;
+      -webkit-appearance: none; appearance: none;
+      height: 6px; border-radius: 3px;
+      background: #3a3a3c; outline: none; cursor: pointer;
+    }
+    #oneXPos::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      cursor: pointer;
+    }
+    #oneXPos-pct {
+      font-size: 13px; font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      min-width: 36px; text-align: right;
+    }
+
     /* Appearance selector */
     #appearance {
       background: #3a3a3c;
@@ -194,6 +216,16 @@
         <div class="toggle-track"></div>
         <div class="toggle-thumb"></div>
       </label>
+    </div>
+    <div class="card-row">
+      <div>
+        <div class="row-label">1× position</div>
+        <div class="row-sublabel">Where 1× sits on the slider</div>
+      </div>
+      <div class="onex-wrap">
+        <input type="range" id="oneXPos" min="10" max="90" step="1" value="50">
+        <span id="oneXPos-pct">50%</span>
+      </div>
     </div>
     <div class="card-row">
       <div class="row-label">Appearance</div>

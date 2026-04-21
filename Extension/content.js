@@ -42,19 +42,23 @@
   const SNAP_ZONE  = 30;
 
   let maxSpeed   = DEFAULT_MAX;
+  let oneXPos    = 0.5;   // fraction (0–1) where 1x sits on the slider
   let snapToOne  = false;
   let appearance = 'auto';
   let lastUrl    = location.href;
   let darkModeObserver = null;
 
   // ── Speed math ─────────────────────────────────────────────────────────────
+  // oneXPos is the fraction of the slider (0–1) where speed = 1x.
+  // Left of it: 0x→1x linearly. Right of it: 1x→maxSpeed linearly.
   function sliderToSpeed(raw) {
     const v = raw / 1000;
-    return v <= 0.5 ? v * 2 : 1 + (v - 0.5) * 2 * (maxSpeed - 1);
+    if (v <= oneXPos) return oneXPos > 0 ? v / oneXPos : 0;
+    return 1 + (v - oneXPos) / (1 - oneXPos) * (maxSpeed - 1);
   }
   function speedToSlider(speed) {
-    if (speed <= 1) return Math.round((speed / 2) * 1000);
-    return Math.round((0.5 + (speed - 1) / (2 * (maxSpeed - 1))) * 1000);
+    if (speed <= 1) return Math.round(speed * oneXPos * 1000);
+    return Math.round((oneXPos + (speed - 1) / (maxSpeed - 1) * (1 - oneXPos)) * 1000);
   }
   function fmt(speed) {
     if (speed < 0.05) return '0x';
@@ -219,16 +223,25 @@
 
     const slider = document.createElement('input');
     slider.type = 'range'; slider.id = 'yt-speed-slider';
-    slider.min = '0'; slider.max = '1000'; slider.step = '1'; slider.value = '500';
+    slider.min = '0'; slider.max = '1000'; slider.step = '1';
+    slider.value = String(Math.round(oneXPos * 1000));
 
     trackWrap.appendChild(midMark);
     trackWrap.appendChild(slider);
 
-    // Row 4: end labels
+    // Row 4: end labels — 0x left, maxSpeed right, 1x floated to oneXPos
     const endLabels = document.createElement('div');
     endLabels.id = 'yt-speed-ends';
     endLabels.innerHTML =
-      `<span>0x</span><span>1x</span><span id="yt-speed-max-label">${maxSpeed}x</span>`;
+      `<span>0x</span><span id="yt-speed-onex-label">1x</span><span id="yt-speed-max-label">${maxSpeed}x</span>`;
+
+    function updateMarkers() {
+      const pct = (oneXPos * 100).toFixed(1) + '%';
+      midMark.style.left = pct;
+      const lbl = document.getElementById('yt-speed-onex-label');
+      if (lbl) lbl.style.left = pct;
+    }
+    updateMarkers();
 
     // Settings panel
     const panel = document.createElement('div');
@@ -237,6 +250,13 @@
       <div class="yt-sp-row">
         <span>Max speed</span>
         <input type="number" id="yt-sp-max" min="2" max="100" step="0.5" value="${maxSpeed}">
+      </div>
+      <div class="yt-sp-row">
+        <span>1× position</span>
+        <div class="yt-sp-onex-wrap">
+          <input type="range" id="yt-sp-onex" min="10" max="90" step="1" value="${Math.round(oneXPos * 100)}">
+          <span id="yt-sp-onex-pct">${Math.round(oneXPos * 100)}%</span>
+        </div>
       </div>
       <div class="yt-sp-row">
         <span>Snap to 1×</span>
@@ -269,7 +289,8 @@
     let _applySpeedTimer = null;
     slider.addEventListener('input', () => {
       let val = parseInt(slider.value, 10);
-      if (snapToOne && Math.abs(val - 500) <= SNAP_ZONE) { val = 500; slider.value = '500'; }
+      const oneXVal = Math.round(oneXPos * 1000);
+      if (snapToOne && Math.abs(val - oneXVal) <= SNAP_ZONE) { val = oneXVal; slider.value = String(oneXVal); }
       const speed = sliderToSpeed(val);
       label.textContent = fmt(speed);
       clearTimeout(_applySpeedTimer);
@@ -303,7 +324,11 @@
     let lastTap = 0;
     label.addEventListener('touchend', () => {
       const now = Date.now();
-      if (now - lastTap < 300) { slider.value = '500'; label.textContent = '1x'; applySpeed(1); }
+      if (now - lastTap < 300) {
+        slider.value = String(Math.round(oneXPos * 1000));
+        label.textContent = '1x';
+        applySpeed(1);
+      }
       lastTap = now;
     });
 
@@ -313,17 +338,26 @@
       panel.classList.toggle('open');
     });
 
+    // Live-update the percentage label as the oneXPos slider moves
+    document.getElementById('yt-sp-onex').addEventListener('input', () => {
+      document.getElementById('yt-sp-onex-pct').textContent =
+        document.getElementById('yt-sp-onex').value + '%';
+    });
+
     document.getElementById('yt-sp-save').addEventListener('click', () => {
-      const newMax  = parseFloat(document.getElementById('yt-sp-max').value);
-      const newSnap = document.getElementById('yt-sp-snap').checked;
+      const newMax    = parseFloat(document.getElementById('yt-sp-max').value);
+      const newSnap   = document.getElementById('yt-sp-snap').checked;
+      const newOneX   = parseInt(document.getElementById('yt-sp-onex').value, 10) / 100;
       if (isNaN(newMax) || newMax < 2) return;
-      maxSpeed = newMax; snapToOne = newSnap;
-      _api.storage.sync.set({ maxSpeed, snapToOne });
+      maxSpeed = newMax; snapToOne = newSnap; oneXPos = newOneX;
+      _api.storage.sync.set({ maxSpeed, snapToOne, oneXPos });
       settingsBtn.textContent = `max ${maxSpeed}x ✎`;
       document.getElementById('yt-speed-max-label').textContent = maxSpeed + 'x';
+      updateMarkers();
+      slider.value = String(Math.round(oneXPos * 1000));
+      label.textContent = '1x';
+      applySpeed(1);
       panel.classList.remove('open');
-      const cs = sliderToSpeed(parseInt(slider.value, 10));
-      if (cs > maxSpeed) { slider.value = '1000'; label.textContent = fmt(maxSpeed); applySpeed(maxSpeed); }
     });
 
   }
@@ -337,11 +371,13 @@
 
   function loadAndBuild() {
     _api.storage.sync.get(
-      { maxSpeed: DEFAULT_MAX, snapToOne: false, appearance: 'auto' },
+      { maxSpeed: DEFAULT_MAX, snapToOne: false, appearance: 'auto', oneXPos: 0.5 },
       (result) => {
         maxSpeed   = parseFloat(result.maxSpeed) || DEFAULT_MAX;
         snapToOne  = !!result.snapToOne;
         appearance = result.appearance || 'auto';
+        oneXPos    = parseFloat(result.oneXPos);
+        if (isNaN(oneXPos) || oneXPos < 0.1 || oneXPos > 0.9) oneXPos = 0.5;
         applyYouTubeDarkMode();
         if (isWatchPage()) buildSlider();
       }
@@ -369,12 +405,16 @@
     _api.storage.onChanged.addListener((changes) => {
       if (changes.maxSpeed)  maxSpeed  = parseFloat(changes.maxSpeed.newValue)  || DEFAULT_MAX;
       if (changes.snapToOne) snapToOne = !!changes.snapToOne.newValue;
+      if (changes.oneXPos) {
+        const v = parseFloat(changes.oneXPos.newValue);
+        oneXPos = (!isNaN(v) && v >= 0.1 && v <= 0.9) ? v : 0.5;
+      }
       if (changes.appearance) {
         appearance = changes.appearance.newValue || 'auto';
         const c = document.getElementById(SLIDER_ID);
         if (c) applyTheme(c); else applyYouTubeDarkMode();
       }
-      if (changes.maxSpeed || changes.snapToOne) {
+      if (changes.maxSpeed || changes.snapToOne || changes.oneXPos) {
         removeSlider();
         if (isWatchPage()) buildSlider();
       }

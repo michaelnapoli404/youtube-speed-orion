@@ -4,15 +4,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const input      = document.getElementById('maxSpeed');
   const snapCheck  = document.getElementById('snapToOne');
   const appearSel  = document.getElementById('appearance');
+  const oneXSlider = document.getElementById('oneXPos');
+  const oneXPct    = document.getElementById('oneXPos-pct');
   const saveBtn    = document.getElementById('save');
   const status     = document.getElementById('status');
   const presets    = document.querySelectorAll('.preset');
 
-  _api.storage.sync.get({ maxSpeed: 10, snapToOne: false, appearance: 'auto' }, (result) => {
+  _api.storage.sync.get({ maxSpeed: 10, snapToOne: false, appearance: 'auto', oneXPos: 0.5 }, (result) => {
     input.value       = parseFloat(result.maxSpeed) || 10;
     snapCheck.checked = !!result.snapToOne;
     appearSel.value   = result.appearance || 'auto';
+    const pos = Math.round((parseFloat(result.oneXPos) || 0.5) * 100);
+    oneXSlider.value  = pos;
+    oneXPct.textContent = pos + '%';
     syncPresets(parseFloat(input.value));
+  });
+
+  oneXSlider.addEventListener('input', () => {
+    oneXPct.textContent = oneXSlider.value + '%';
   });
 
   presets.forEach(btn => {
@@ -36,7 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (value > 100)               { showStatus('Maximum is 100×', '#ff453a');      return; }
 
     _api.storage.sync.set(
-      { maxSpeed: value, snapToOne: snapCheck.checked, appearance: appearSel.value },
+      {
+        maxSpeed:   value,
+        snapToOne:  snapCheck.checked,
+        appearance: appearSel.value,
+        oneXPos:    parseInt(oneXSlider.value, 10) / 100,
+      },
       () => showStatus('Saved!', '#30d158')
     );
   });
