@@ -1,6 +1,41 @@
 (function () {
   'use strict';
 
+  // ── Page-context prototype patch ───────────────────────────────────────────
+  // Content scripts run in an isolated JS world — patching prototypes here
+  // won't affect YouTube's code. We inject a <script> tag so the patch runs
+  // in the SAME context as YouTube, before YouTube's player initialises.
+  // Communication uses video.dataset.ytBlockFs (DOM is shared across worlds).
+  (function injectPagePatch() {
+    const s = document.createElement('script');
+    s.textContent = `(function(){
+      // Patch webkitEnterFullScreen on the video element prototype
+      var origEnterFs = HTMLVideoElement.prototype.webkitEnterFullScreen;
+      if (origEnterFs) {
+        HTMLVideoElement.prototype.webkitEnterFullScreen = function() {
+          if (this.dataset && this.dataset.ytBlockFs === '1') return;
+          return origEnterFs.apply(this, arguments);
+        };
+      }
+      // Patch requestFullscreen / webkitRequestFullscreen on Element prototype
+      ['requestFullscreen', 'webkitRequestFullscreen'].forEach(function(method) {
+        var orig = Element.prototype[method];
+        if (!orig) return;
+        Element.prototype[method] = function() {
+          var vid = document.querySelector('video');
+          if (vid && vid.dataset && vid.dataset.ytBlockFs === '1') {
+            return (method === 'requestFullscreen') ? Promise.resolve() : undefined;
+          }
+          return orig.apply(this, arguments);
+        };
+      });
+    })();`;
+    // document.documentElement always exists at document_start
+    document.documentElement.appendChild(s);
+    s.remove();
+  })();
+
+  // ── Rest of extension runs after DOM is ready ──────────────────────────────
   const _api = typeof browser !== 'undefined' ? browser : chrome;
   const SLIDER_ID = 'yt-speed-container';
   const DEFAULT_MAX = 10;
@@ -29,93 +64,59 @@
   function getVideo()  { return document.querySelector('video'); }
   function getPlayer() { return document.querySelector('.html5-video-player'); }
 
-  // ── Apply speed — use YouTube's own API to preserve audio on WebKit ────────
-  // WebKit drops audio on MSE streams (YouTube's separate audio+video tracks)
-  // when video.playbackRate is set directly. player.setPlaybackRate() routes
-  // through YouTube's own audio pipeline and keeps sound at any speed.
+  // ── Apply speed via YouTube's own API (preserves audio on WebKit/MSE) ──────
   function applySpeed(speed) {
     speed = Math.max(0, speed);
-
     const player = getPlayer();
     if (player && typeof player.setPlaybackRate === 'function') {
       player.setPlaybackRate(speed);
-      // Also set on the video element directly as a fallback for very high
-      // speeds that YouTube's API may clamp (it will still work visually)
       const v = getVideo();
       if (v && Math.abs(v.playbackRate - speed) > 0.01) v.playbackRate = speed;
       return;
     }
-
-    // No YouTube player API available — fall back to direct video element
     const v = getVideo();
     if (v) v.playbackRate = speed;
   }
 
-  // ── iOS fullscreen interception ────────────────────────────────────────────
-  // iOS video fullscreen is completely separate from the W3C Fullscreen API.
-  // document.fullscreenElement is always null on iOS — the correct APIs are:
-  //   video.webkitDisplayingFullscreen  (detection)
-  //   webkitbeginfullscreen event       (fires on the video element on entry)
-  //   video.webkitExitFullScreen()      (exit — note capital S in Screen)
-  //
-  // We attach a listener to the video element. When our button was the cause
-  // (blockFullscreen flag is set), we call webkitExitFullScreen immediately.
-  let blockFullscreen = false;
-
-  function setupIOSFullscreenInterception(video) {
-    if (video._ytSpeedFsPatched) return;
-    video._ytSpeedFsPatched = true;
-
-    video.addEventListener('webkitbeginfullscreen', () => {
-      if (!blockFullscreen) return;
-      // Give WebKit one frame to finish entering fullscreen, then exit
-      requestAnimationFrame(() => {
-        try { video.webkitExitFullScreen(); } catch (_) {}
-      });
-    });
+  // ── Block flag: set on video dataset (shared DOM, visible to page context) ─
+  let _blockFsTimer = null;
+  function armFullscreenBlock() {
+    const v = getVideo();
+    if (!v) return;
+    v.dataset.ytBlockFs = '1';
+    clearTimeout(_blockFsTimer);
+    // Clear after 1.5s in case play never triggers fullscreen
+    _blockFsTimer = setTimeout(() => { delete v.dataset.ytBlockFs; }, 1500);
   }
 
   // ── Play / Pause ───────────────────────────────────────────────────────────
   function ytTogglePlayPause() {
-    const v = getVideo();
-    if (v) setupIOSFullscreenInterception(v);
-
     const player = getPlayer();
 
     if (player && typeof player.playVideo === 'function') {
       const state = player.getPlayerState();
       if (state === 1 || state === 3) {
-        // Pausing — no fullscreen risk
         player.pauseVideo();
       } else {
-        // Playing — arm the fullscreen block flag before calling play
-        blockFullscreen = true;
-        setTimeout(() => { blockFullscreen = false; }, 1500);
+        armFullscreenBlock();   // set flag BEFORE play so patch sees it
         player.playVideo();
       }
       return;
     }
 
-    // Fallback: click YouTube's native play button
     const ytBtn = document.querySelector('.ytp-play-button');
     if (ytBtn) {
-      blockFullscreen = true;
-      setTimeout(() => { blockFullscreen = false; }, 1500);
+      armFullscreenBlock();
       ytBtn.click();
       return;
     }
 
-    // Last resort: direct video element
+    const v = getVideo();
     if (!v) return;
     v.setAttribute('playsinline', '');
     v.setAttribute('webkit-playsinline', '');
-    if (v.paused) {
-      blockFullscreen = true;
-      setTimeout(() => { blockFullscreen = false; }, 1500);
-      v.play();
-    } else {
-      v.pause();
-    }
+    if (v.paused) { armFullscreenBlock(); v.play(); }
+    else { v.pause(); }
   }
 
   // ── YouTube dark mode ──────────────────────────────────────────────────────
@@ -195,8 +196,6 @@
     const playBtn = document.createElement('button');
     playBtn.id = 'yt-speed-playpause';
     const video = getVideo();
-    // Set up iOS fullscreen interception as early as possible
-    if (video) setupIOSFullscreenInterception(video);
     playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
     playRow.appendChild(playBtn);
 
@@ -312,15 +311,12 @@
       if (cs > maxSpeed) { slider.value = '1000'; label.textContent = fmt(maxSpeed); applySpeed(maxSpeed); }
     });
 
-    // ── Rate sync — only fight back if YouTube changes it unprompted ──────
-    let rateChangedByUs = false;
-    const origApply = applySpeed;
+    // ── Fight YouTube reasserting playbackRate ────────────────────────────
     if (video) {
       video.addEventListener('ratechange', () => {
-        if (rateChangedByUs) return;
         const expected = sliderToSpeed(parseInt(slider.value, 10));
         if (Math.abs(video.playbackRate - expected) > 0.05) {
-          setTimeout(() => { rateChangedByUs = true; applySpeed(expected); rateChangedByUs = false; }, 50);
+          setTimeout(() => applySpeed(expected), 50);
         }
       });
     }
@@ -346,10 +342,7 @@
     );
   }
 
-  // ── SPA navigation watcher — URL changes only, NO recommendation hiding ───
-  // Calling querySelectorAll in a MutationObserver during video playback
-  // causes audio/video desync and jitter on WebKit. Recommendations are
-  // handled exclusively by the heartbeat below.
+  // ── SPA navigation watcher ─────────────────────────────────────────────────
   const navObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
@@ -357,28 +350,39 @@
       if (isWatchPage()) setTimeout(loadAndBuild, 1200);
     }
   });
-  navObserver.observe(document.documentElement, { subtree: true, childList: true });
 
-  // ── Heartbeat — slider re-injection + recommendation hiding ───────────────
-  setInterval(() => {
-    if (isWatchPage() && !document.getElementById(SLIDER_ID)) loadAndBuild();
+  // ── Startup — wait for DOM since we run at document_start ─────────────────
+  function init() {
+    navObserver.observe(document.documentElement, { subtree: true, childList: true });
+
+    setInterval(() => {
+      if (isWatchPage() && !document.getElementById(SLIDER_ID)) loadAndBuild();
+      hideRecommendations();
+    }, 3000);
+
+    _api.storage.onChanged.addListener((changes) => {
+      if (changes.maxSpeed)  maxSpeed  = parseFloat(changes.maxSpeed.newValue)  || DEFAULT_MAX;
+      if (changes.snapToOne) snapToOne = !!changes.snapToOne.newValue;
+      if (changes.appearance) {
+        appearance = changes.appearance.newValue || 'auto';
+        const c = document.getElementById(SLIDER_ID);
+        if (c) applyTheme(c); else applyYouTubeDarkMode();
+      }
+      if (changes.maxSpeed || changes.snapToOne) {
+        removeSlider();
+        if (isWatchPage()) buildSlider();
+      }
+    });
+
     hideRecommendations();
-  }, 3000);
+    loadAndBuild();
+  }
 
-  _api.storage.onChanged.addListener((changes) => {
-    if (changes.maxSpeed)  maxSpeed  = parseFloat(changes.maxSpeed.newValue)  || DEFAULT_MAX;
-    if (changes.snapToOne) snapToOne = !!changes.snapToOne.newValue;
-    if (changes.appearance) {
-      appearance = changes.appearance.newValue || 'auto';
-      const c = document.getElementById(SLIDER_ID);
-      if (c) applyTheme(c); else applyYouTubeDarkMode();
-    }
-    if (changes.maxSpeed || changes.snapToOne) {
-      removeSlider();
-      if (isWatchPage()) buildSlider();
-    }
-  });
+  // document_start fires before DOM is parsed — wait for it to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
-  hideRecommendations();
-  loadAndBuild();
 })();
