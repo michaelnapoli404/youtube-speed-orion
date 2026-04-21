@@ -65,17 +65,27 @@
   function getPlayer() { return document.querySelector('.html5-video-player'); }
 
   // ── Apply speed via YouTube's own API (preserves audio on WebKit/MSE) ──────
+  // IMPORTANT: never set video.playbackRate after player.setPlaybackRate —
+  // the direct write drops audio on WebKit MSE streams.
   function applySpeed(speed) {
     speed = Math.max(0, speed);
     const player = getPlayer();
     if (player && typeof player.setPlaybackRate === 'function') {
       player.setPlaybackRate(speed);
-      const v = getVideo();
-      if (v && Math.abs(v.playbackRate - speed) > 0.01) v.playbackRate = speed;
       return;
     }
     const v = getVideo();
     if (v) v.playbackRate = speed;
+  }
+
+  // ── Ensure video never auto-fullscreens on iOS ────────────────────────────
+  // iOS WebKit auto-enters fullscreen when a video plays without playsinline.
+  // Setting these attributes tells WebKit to play inline regardless.
+  function ensurePlaysinline() {
+    const v = getVideo();
+    if (!v) return;
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
   }
 
   // ── Block flag: set on video dataset (shared DOM, visible to page context) ─
@@ -83,6 +93,7 @@
   function armFullscreenBlock() {
     const v = getVideo();
     if (!v) return;
+    ensurePlaysinline();          // belt-and-suspenders: inline attr + prototype patch
     v.dataset.ytBlockFs = '1';
     clearTimeout(_blockFsTimer);
     // Clear after 1.5s in case play never triggers fullscreen
@@ -245,6 +256,9 @@
     container.appendChild(panel);
     document.body.appendChild(container);
 
+    // Ensure inline playback from the start
+    ensurePlaysinline();
+
     // Sync to current speed
     if (video && video.playbackRate !== 1) {
       const clamped = Math.min(video.playbackRate, maxSpeed);
@@ -312,11 +326,15 @@
     });
 
     // ── Fight YouTube reasserting playbackRate ────────────────────────────
+    // Guard flag prevents our own applySpeed call from re-triggering this.
     if (video) {
+      let _rateChangeBusy = false;
       video.addEventListener('ratechange', () => {
+        if (_rateChangeBusy) return;
         const expected = sliderToSpeed(parseInt(slider.value, 10));
         if (Math.abs(video.playbackRate - expected) > 0.05) {
-          setTimeout(() => applySpeed(expected), 50);
+          _rateChangeBusy = true;
+          setTimeout(() => { applySpeed(expected); _rateChangeBusy = false; }, 50);
         }
       });
     }
