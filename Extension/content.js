@@ -8,9 +8,47 @@
 
   let maxSpeed   = DEFAULT_MAX;
   let snapToOne  = false;
-  let appearance = 'auto'; // 'auto' | 'dark' | 'light'
+  let appearance = 'auto';
   let lastUrl    = location.href;
   let darkModeObserver = null;
+
+  // ── Fullscreen interception ────────────────────────────────────────────────
+  // When our play button fires, we set this flag for 800ms.
+  // Any fullscreen request during that window is silently dropped.
+  let blockNextFullscreen = false;
+
+  (function patchFullscreen() {
+    // Standard requestFullscreen
+    const orig = Element.prototype.requestFullscreen;
+    if (orig) {
+      Element.prototype.requestFullscreen = function (...args) {
+        if (blockNextFullscreen) { blockNextFullscreen = false; return Promise.resolve(); }
+        return orig.apply(this, args);
+      };
+    }
+    // WebKit requestFullscreen
+    const origWK = Element.prototype.webkitRequestFullscreen;
+    if (origWK) {
+      Element.prototype.webkitRequestFullscreen = function (...args) {
+        if (blockNextFullscreen) { blockNextFullscreen = false; return; }
+        return origWK.apply(this, args);
+      };
+    }
+    // iOS video-specific webkitEnterFullScreen — must patch the video element
+    // itself after it exists, so we do it lazily in ytTogglePlayPause()
+  })();
+
+  function patchVideoFullscreen(video) {
+    if (video._ytSpeedPatched) return;
+    video._ytSpeedPatched = true;
+    const orig = video.webkitEnterFullScreen;
+    if (orig) {
+      video.webkitEnterFullScreen = function (...args) {
+        if (blockNextFullscreen) { blockNextFullscreen = false; return; }
+        return orig.apply(this, args);
+      };
+    }
+  }
 
   // ── Speed math ─────────────────────────────────────────────────────────────
   function sliderToSpeed(raw) {
@@ -32,73 +70,56 @@
     if (v) v.playbackRate = Math.max(0, speed);
   }
 
-  // ── YouTube dark mode ──────────────────────────────────────────────────────
-  // 'auto'  → leave html[dark] alone (YouTube controls it)
-  // 'dark'  → force html[dark] on and watch for YouTube removing it
-  // 'light' → force html[dark] off and watch for YouTube re-adding it
-  function applyYouTubeDarkMode() {
-    if (darkModeObserver) {
-      darkModeObserver.disconnect();
-      darkModeObserver = null;
+  // ── Play / Pause ───────────────────────────────────────────────────────────
+  function ytTogglePlayPause() {
+    const v = getVideo();
+    if (v) patchVideoFullscreen(v);
+
+    // Set flag BEFORE triggering play so the fullscreen patch catches it
+    blockNextFullscreen = true;
+    setTimeout(() => { blockNextFullscreen = false; }, 800);
+
+    // Prefer YouTube's internal API (same path as their own button)
+    const player = document.querySelector('.html5-video-player');
+    if (player && typeof player.playVideo === 'function') {
+      const state = player.getPlayerState();
+      if (state === 1 || state === 3) { player.pauseVideo(); } else { player.playVideo(); }
+      return;
     }
 
-    if (appearance === 'auto') return; // let YouTube manage it
+    // Fallback: click YouTube's native play button
+    const ytBtn = document.querySelector('.ytp-play-button');
+    if (ytBtn) { ytBtn.click(); return; }
+
+    // Last resort: direct video control
+    if (!v) return;
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
+    if (v.paused) { v.play(); } else { v.pause(); }
+  }
+
+  // ── YouTube dark mode ──────────────────────────────────────────────────────
+  function applyYouTubeDarkMode() {
+    if (darkModeObserver) { darkModeObserver.disconnect(); darkModeObserver = null; }
+    if (appearance === 'auto') return;
 
     const wantDark = appearance === 'dark';
-
     function enforce() {
       const has = document.documentElement.hasAttribute('dark');
       if (wantDark && !has) document.documentElement.setAttribute('dark', '');
       if (!wantDark && has) document.documentElement.removeAttribute('dark');
     }
-
     enforce();
-
-    // Re-enforce if YouTube's JS fights back
     darkModeObserver = new MutationObserver(enforce);
     darkModeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['dark']
+      attributes: true, attributeFilter: ['dark']
     });
   }
 
-  // ── Apply theme attribute to our container ────────────────────────────────
   function applyTheme(container) {
-    if (appearance === 'auto') {
-      container.removeAttribute('data-theme');
-    } else {
-      container.setAttribute('data-theme', appearance);
-    }
+    if (appearance === 'auto') { container.removeAttribute('data-theme'); }
+    else { container.setAttribute('data-theme', appearance); }
     applyYouTubeDarkMode();
-  }
-
-  // ── Play / Pause via YouTube's internal API ───────────────────────────────
-  // Using YouTube's own playVideo()/pauseVideo() avoids the iOS fullscreen
-  // that video.play() can trigger when called outside YouTube's player context.
-  function ytTogglePlayPause() {
-    // Preferred: YouTube's internal player methods
-    const player = document.querySelector('.html5-video-player');
-    if (player && typeof player.playVideo === 'function') {
-      const state = player.getPlayerState();
-      // 1 = playing, 3 = buffering → pause; everything else → play
-      if (state === 1 || state === 3) {
-        player.pauseVideo();
-      } else {
-        player.playVideo();
-      }
-      return;
-    }
-
-    // Fallback: click YouTube's native play button (desktop layout)
-    const ytBtn = document.querySelector('.ytp-play-button');
-    if (ytBtn) { ytBtn.click(); return; }
-
-    // Last resort: direct video control with playsinline guard
-    const v = getVideo();
-    if (!v) return;
-    v.setAttribute('playsinline', '');
-    v.setAttribute('webkit-playsinline', '');
-    if (v.paused) { v.play(); } else { v.pause(); }
   }
 
   // ── Recommendation hiding ─────────────────────────────────────────────────
@@ -134,14 +155,13 @@
     container.id = SLIDER_ID;
     applyTheme(container);
 
-    // Row 1: speed label + settings button
+    // Row 1: speed label + settings
     const topRow = document.createElement('div');
     topRow.id = 'yt-speed-top-row';
 
     const label = document.createElement('div');
     label.id = 'yt-speed-label';
     label.textContent = '1x';
-    label.title = 'Double-tap to reset to 1×';
 
     const settingsBtn = document.createElement('button');
     settingsBtn.id = 'yt-speed-settings-btn';
@@ -150,18 +170,18 @@
     topRow.appendChild(label);
     topRow.appendChild(settingsBtn);
 
-    // Row 2: centered play/pause
+    // Row 2: play/pause
     const playRow = document.createElement('div');
     playRow.id = 'yt-speed-play-row';
 
     const playBtn = document.createElement('button');
     playBtn.id = 'yt-speed-playpause';
     const video = getVideo();
+    if (video) patchVideoFullscreen(video);
     playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
-
     playRow.appendChild(playBtn);
 
-    // Row 3: slider track
+    // Row 3: slider
     const trackWrap = document.createElement('div');
     trackWrap.id = 'yt-speed-track-wrap';
 
@@ -169,9 +189,8 @@
     midMark.id = 'yt-speed-midmark';
 
     const slider = document.createElement('input');
-    slider.type  = 'range';
-    slider.id    = 'yt-speed-slider';
-    slider.min   = '0'; slider.max = '1000'; slider.step = '1'; slider.value = '500';
+    slider.type = 'range'; slider.id = 'yt-speed-slider';
+    slider.min = '0'; slider.max = '1000'; slider.step = '1'; slider.value = '500';
 
     trackWrap.appendChild(midMark);
     trackWrap.appendChild(slider);
@@ -201,11 +220,6 @@
       <button id="yt-sp-save">Save</button>
     `;
 
-    // Stop all container touches from reaching YouTube's player beneath
-    ['touchstart', 'touchmove', 'touchend'].forEach(evt =>
-      container.addEventListener(evt, e => e.stopPropagation(), { passive: true })
-    );
-
     container.appendChild(topRow);
     container.appendChild(playRow);
     container.appendChild(trackWrap);
@@ -213,60 +227,58 @@
     container.appendChild(panel);
     document.body.appendChild(container);
 
-    // Sync slider to current video speed
+    // Sync to current speed
     if (video && video.playbackRate !== 1) {
       const clamped = Math.min(video.playbackRate, maxSpeed);
       slider.value = speedToSlider(clamped);
       label.textContent = fmt(clamped);
     }
 
-    // ── Slider input ──────────────────────────────────────────────────────
+    // ── Slider events ─────────────────────────────────────────────────────
     slider.addEventListener('input', () => {
       let val = parseInt(slider.value, 10);
-      if (snapToOne && Math.abs(val - 500) <= SNAP_ZONE) {
-        val = 500; slider.value = '500';
-      }
+      if (snapToOne && Math.abs(val - 500) <= SNAP_ZONE) { val = 500; slider.value = '500'; }
       const speed = sliderToSpeed(val);
       label.textContent = fmt(speed);
       applySpeed(speed);
     });
 
+    // Only stop propagation on the slider itself — NOT the whole container.
+    // Blanket container stopPropagation breaks YouTube's volume and player controls.
     ['touchstart', 'touchmove', 'touchend'].forEach(evt =>
       slider.addEventListener(evt, e => e.stopPropagation(), { passive: true })
     );
 
-    // ── Play/pause — use YouTube's internal API to avoid fullscreen ───────
-    playBtn.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    // ── Play button ───────────────────────────────────────────────────────
+    ['touchstart', 'touchmove'].forEach(evt =>
+      playBtn.addEventListener(evt, e => e.stopPropagation(), { passive: true })
+    );
 
     playBtn.addEventListener('touchend', (e) => {
-      e.preventDefault();  // suppress synthetic click so YouTube's overlay never sees it
+      e.preventDefault();  // suppress synthetic click
       e.stopPropagation();
       ytTogglePlayPause();
     }, { passive: false });
 
-    // Non-touch fallback (Orion desktop mode)
     playBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       ytTogglePlayPause();
     });
 
-    // Keep icon in sync with actual video state
     if (video) {
       video.addEventListener('play',  () => { playBtn.textContent = '⏸'; });
       video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
     }
 
-    // ── Double-tap speed label → reset to 1× ─────────────────────────────
+    // ── Double-tap label → 1× ─────────────────────────────────────────────
     let lastTap = 0;
     label.addEventListener('touchend', () => {
       const now = Date.now();
-      if (now - lastTap < 300) {
-        slider.value = '500'; label.textContent = '1x'; applySpeed(1);
-      }
+      if (now - lastTap < 300) { slider.value = '500'; label.textContent = '1x'; applySpeed(1); }
       lastTap = now;
     });
 
-    // ── Settings panel toggle ─────────────────────────────────────────────
+    // ── Settings panel ────────────────────────────────────────────────────
     settingsBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       panel.classList.toggle('open');
@@ -276,18 +288,13 @@
       const newMax  = parseFloat(document.getElementById('yt-sp-max').value);
       const newSnap = document.getElementById('yt-sp-snap').checked;
       if (isNaN(newMax) || newMax < 2) return;
-
       maxSpeed = newMax; snapToOne = newSnap;
       _api.storage.sync.set({ maxSpeed, snapToOne });
-
       settingsBtn.textContent = `max ${maxSpeed}x ✎`;
       document.getElementById('yt-speed-max-label').textContent = maxSpeed + 'x';
       panel.classList.remove('open');
-
-      const currentSpeed = sliderToSpeed(parseInt(slider.value, 10));
-      if (currentSpeed > maxSpeed) {
-        slider.value = '1000'; label.textContent = fmt(maxSpeed); applySpeed(maxSpeed);
-      }
+      const cs = sliderToSpeed(parseInt(slider.value, 10));
+      if (cs > maxSpeed) { slider.value = '1000'; label.textContent = fmt(maxSpeed); applySpeed(maxSpeed); }
     });
 
     // ── Fight YouTube reasserting playbackRate ────────────────────────────
@@ -308,7 +315,6 @@
 
   function isWatchPage() { return location.pathname === '/watch'; }
 
-  // ── Init ───────────────────────────────────────────────────────────────────
   function loadAndBuild() {
     _api.storage.sync.get(
       { maxSpeed: DEFAULT_MAX, snapToOne: false, appearance: 'auto' },
@@ -323,34 +329,34 @@
   }
 
   // ── SPA navigation watcher ─────────────────────────────────────────────────
+  // Throttle hideRecommendations — calling querySelectorAll on every DOM
+  // mutation during video playback causes jitter.
+  let recThrottle = null;
   const navObserver = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       removeSlider();
       if (isWatchPage()) setTimeout(loadAndBuild, 1200);
     }
-    hideRecommendations();
+    if (!recThrottle) {
+      recThrottle = setTimeout(() => { hideRecommendations(); recThrottle = null; }, 500);
+    }
   });
-  navObserver.observe(document.documentElement, {
-    subtree: true, childList: true,
-    // exclude our own dark-mode attribute mutations to avoid loop
-    attributeFilter: []
-  });
+  navObserver.observe(document.documentElement, { subtree: true, childList: true });
 
+  // Heartbeat
   setInterval(() => {
     if (isWatchPage() && !document.getElementById(SLIDER_ID)) loadAndBuild();
     hideRecommendations();
-  }, 2000);
+  }, 3000);
 
-  // Settings changes from popup
   _api.storage.onChanged.addListener((changes) => {
-    if (changes.maxSpeed)  maxSpeed  = parseFloat(changes.maxSpeed.newValue) || DEFAULT_MAX;
+    if (changes.maxSpeed)  maxSpeed  = parseFloat(changes.maxSpeed.newValue)  || DEFAULT_MAX;
     if (changes.snapToOne) snapToOne = !!changes.snapToOne.newValue;
     if (changes.appearance) {
       appearance = changes.appearance.newValue || 'auto';
       const c = document.getElementById(SLIDER_ID);
-      if (c) applyTheme(c);
-      else applyYouTubeDarkMode();
+      if (c) applyTheme(c); else applyYouTubeDarkMode();
     }
     if (changes.maxSpeed || changes.snapToOne) {
       removeSlider();
