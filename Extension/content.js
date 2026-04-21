@@ -256,9 +256,6 @@
     container.appendChild(panel);
     document.body.appendChild(container);
 
-    // Ensure inline playback from the start
-    ensurePlaysinline();
-
     // Sync to current speed
     if (video && video.playbackRate !== 1) {
       const clamped = Math.min(video.playbackRate, maxSpeed);
@@ -325,19 +322,6 @@
       if (cs > maxSpeed) { slider.value = '1000'; label.textContent = fmt(maxSpeed); applySpeed(maxSpeed); }
     });
 
-    // ── Fight YouTube reasserting playbackRate ────────────────────────────
-    // Guard flag prevents our own applySpeed call from re-triggering this.
-    if (video) {
-      let _rateChangeBusy = false;
-      video.addEventListener('ratechange', () => {
-        if (_rateChangeBusy) return;
-        const expected = sliderToSpeed(parseInt(slider.value, 10));
-        if (Math.abs(video.playbackRate - expected) > 0.05) {
-          _rateChangeBusy = true;
-          setTimeout(() => { applySpeed(expected); _rateChangeBusy = false; }, 50);
-        }
-      });
-    }
   }
 
   function removeSlider() {
