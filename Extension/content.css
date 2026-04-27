@@ -98,14 +98,14 @@ html[dark] #yt-speed-container,
   -webkit-user-select: none; user-select: none;
 }
 
-/* ── Play/pause row ──────────────────────────────────────────────────────── */
+/* ── Play/pause row — three sections so play stays centered ──────────────── */
 #yt-speed-play-row {
   width: 100%;
-  position: relative;
   display: flex;
-  justify-content: center;
   align-items: center;
 }
+#yt-speed-play-left  { flex: 1; }
+#yt-speed-play-right { flex: 1; display: flex; justify-content: flex-end; }
 
 #yt-speed-playpause {
   width: 324px; height: 324px;
@@ -121,8 +121,6 @@ html[dark] #yt-speed-container,
 }
 
 #yt-speed-fsbtn {
-  position: absolute;
-  right: 0;
   width: 162px; height: 162px;
   border-radius: 50%;
   border: none;

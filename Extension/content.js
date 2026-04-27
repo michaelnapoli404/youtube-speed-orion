@@ -218,21 +218,30 @@
     topRow.appendChild(label);
     topRow.appendChild(settingsBtn);
 
-    // Row 2: play/pause + fullscreen
+    // Row 2: [left spacer] [play button] [fullscreen button]
+    // Three-section layout keeps play centered and fs button non-overlapping.
     const playRow = document.createElement('div');
     playRow.id = 'yt-speed-play-row';
+
+    const playLeft = document.createElement('div');
+    playLeft.id = 'yt-speed-play-left';
 
     const playBtn = document.createElement('button');
     playBtn.id = 'yt-speed-playpause';
     const video = getVideo();
     playBtn.textContent = (video && video.paused) ? '▶' : '⏸';
 
+    const playRight = document.createElement('div');
+    playRight.id = 'yt-speed-play-right';
+
     const fsBtn = document.createElement('button');
     fsBtn.id = 'yt-speed-fsbtn';
-    fsBtn.textContent = '⛶';
+    fsBtn.textContent = '⤢';   // diagonal expand arrows — renders on all iOS fonts
 
+    playRight.appendChild(fsBtn);
+    playRow.appendChild(playLeft);
     playRow.appendChild(playBtn);
-    playRow.appendChild(fsBtn);
+    playRow.appendChild(playRight);
 
     // Row 3: slider
     const trackWrap = document.createElement('div');
