@@ -331,14 +331,19 @@
     );
 
     // ── Play button ───────────────────────────────────────────────────────
-    ['touchstart', 'touchmove'].forEach(evt =>
-      playBtn.addEventListener(evt, e => e.stopPropagation(), { passive: true })
-    );
-    playBtn.addEventListener('touchend', (e) => {
+    // Fire on touchstart, not touchend: touchend falls inside iOS's post-
+    // double-tap gesture suppression window (~3-4 s), so it never arrives.
+    // touchstart fires before any gesture recognition, so it always lands.
+    // preventDefault() here also blocks the double-tap-zoom on the button
+    // itself and suppresses the ghost click that would follow.
+    playBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
       e.stopPropagation();
       ytTogglePlayPause();
     }, { passive: false });
+    ['touchmove', 'touchend'].forEach(evt =>
+      playBtn.addEventListener(evt, e => e.stopPropagation(), { passive: true })
+    );
     playBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       ytTogglePlayPause();
