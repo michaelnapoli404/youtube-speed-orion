@@ -29,41 +29,6 @@
           return orig.apply(this, arguments);
         };
       });
-
-      // ── Button touch interception ────────────────────────────────────────
-      // Registered here (document_start, page context) so it fires BEFORE
-      // YouTube's own capturing listeners, which are registered later when
-      // YouTube's JS loads. YouTube's seek overlay installs a capturing
-      // touchstart handler that swallows all touches — we beat it to the
-      // punch, steal taps on our buttons, and relay via CustomEvent.
-      var _extTouchId = null;
-      document.addEventListener('touchstart', function(e) {
-        var el = e.target;
-        while (el && el !== document.body) {
-          if (el.id === 'yt-speed-playpause' || el.id === 'yt-speed-fsbtn') {
-            e.stopImmediatePropagation();
-            e.preventDefault();
-            _extTouchId = e.changedTouches[0].identifier;
-            document.dispatchEvent(new CustomEvent('__ytExt__', { detail: el.id }));
-            return;
-          }
-          el = el.parentElement;
-        }
-      }, true);
-
-      // Swallow the rest of the touch sequence so YouTube never sees it
-      ['touchmove', 'touchend', 'touchcancel'].forEach(function(type) {
-        document.addEventListener(type, function(e) {
-          if (_extTouchId === null) return;
-          for (var i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === _extTouchId) {
-              e.stopImmediatePropagation();
-              if (type !== 'touchmove') _extTouchId = null;
-              return;
-            }
-          }
-        }, true);
-      });
     })();`;
     // document.documentElement always exists at document_start
     document.documentElement.appendChild(s);
@@ -365,17 +330,43 @@
       slider.addEventListener(evt, e => e.stopPropagation(), { passive: true })
     );
 
-    // ── Play / fullscreen buttons ─────────────────────────────────────────
-    // Touch handling is done by the capturing listener in the page-context
-    // injection (registered before YouTube's JS, so it fires first).
-    // We only need click here for non-touch fallback (desktop / dev tools).
-    playBtn.addEventListener('click', (e) => { e.stopPropagation(); ytTogglePlayPause(); });
-    fsBtn.addEventListener('click',   (e) => { e.stopPropagation(); enterFullscreen(); });
+    // ── Play button ───────────────────────────────────────────────────────
+    // Fire on touchstart, not touchend: touchend falls inside iOS's post-
+    // double-tap gesture suppression window (~3-4 s), so it never arrives.
+    // touchstart fires before any gesture recognition, so it always lands.
+    // preventDefault() here also blocks the double-tap-zoom on the button
+    // itself and suppresses the ghost click that would follow.
+    playBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      ytTogglePlayPause();
+    }, { passive: false });
+    ['touchmove', 'touchend'].forEach(evt =>
+      playBtn.addEventListener(evt, e => e.stopPropagation(), { passive: true })
+    );
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      ytTogglePlayPause();
+    });
 
     if (video) {
       video.addEventListener('play',  () => { playBtn.textContent = '⏸'; });
       video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
     }
+
+    // ── Fullscreen button ─────────────────────────────────────────────────
+    ['touchstart', 'touchmove'].forEach(evt =>
+      fsBtn.addEventListener(evt, e => e.stopPropagation(), { passive: true })
+    );
+    fsBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      enterFullscreen();
+    }, { passive: false });
+    fsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      enterFullscreen();
+    });
 
     // ── Double-tap label → 1× ─────────────────────────────────────────────
     let lastTap = 0;
@@ -453,14 +444,6 @@
   // ── Startup — wait for DOM since we run at document_start ─────────────────
   function init() {
     navObserver.observe(document.documentElement, { subtree: true, childList: true });
-
-    // Receive button taps relayed from the page-context capturing listener.
-    // The injection intercepts the touchstart before YouTube's handlers run,
-    // swallows the rest of the touch sequence, and fires this custom event.
-    document.addEventListener('__ytExt__', (e) => {
-      if (e.detail === 'yt-speed-playpause') ytTogglePlayPause();
-      else if (e.detail === 'yt-speed-fsbtn') enterFullscreen();
-    });
 
     setInterval(() => {
       if (isWatchPage()) {
