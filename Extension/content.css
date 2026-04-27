@@ -81,7 +81,7 @@ html[dark] #yt-speed-container,
 
 #yt-speed-label {
   font-family: -apple-system, Helvetica Neue, sans-serif;
-  font-size: 15px;
+  font-size: 48px;
   font-weight: 700;
   letter-spacing: 0.3px;
   color: var(--spd-fg);
@@ -108,11 +108,11 @@ html[dark] #yt-speed-container,
 #yt-speed-play-right { flex: 1; display: flex; justify-content: flex-end; }
 
 #yt-speed-playpause {
-  width: 324px; height: 324px;
+  width: 243px; height: 243px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  font-size: 132px;
+  font-size: 99px;
   display: flex; align-items: center; justify-content: center;
   -webkit-user-select: none; user-select: none;
   background: var(--spd-play-bg);
